@@ -97,6 +97,4 @@ export abstract class BaseEventHandler  {
     }
 
     abstract processMessage(sourceMessage: IMessage): Promise<void>;
-
-    abstract _handleErrorReceivedEvt(message: IMessage):Promise<void>;
 }

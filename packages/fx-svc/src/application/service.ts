@@ -59,10 +59,12 @@ import {
 } from "@mojaloop/auditing-bc-client-lib";
 
 import {IAuditClient} from "@mojaloop/auditing-bc-public-types-lib";
-import {IMessageConsumer, IMessageProducer} from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import {IConfigurationClient} from "@mojaloop/platform-configuration-bc-public-types-lib";
 import {IMetrics} from "@mojaloop/platform-shared-lib-observability-types-lib";
 import {PrometheusMetrics} from "@mojaloop/platform-shared-lib-observability-client-lib";
+
+import { ForeignExchangeBCTopics } from "@mojaloop/platform-shared-lib-public-messages-lib";
+import { FXServiceEventHandler } from "./event_handlers/fx_svc_event_handler";
 
 import {Server} from "net";
 import * as util from "util";
@@ -97,18 +99,16 @@ const KAFKA_AUDITS_TOPIC = process.env["KAFKA_AUDITS_TOPIC"] || "audits";
 const KAFKA_LOGS_TOPIC = process.env["KAFKA_LOGS_TOPIC"] || "logs";
 const AUDIT_KEY_FILE_PATH = process.env["AUDIT_KEY_FILE_PATH"] || "/app/data/audit_private_key.pem";
 
-const SVC_DEFAULT_HTTP_PORT = 3010;
+const SVC_DEFAULT_HTTP_PORT = 4000;
 
 // Kafka options
 const kafkaProducerOptions = {
     kafkaBrokerList: KAFKA_URL
 };
-const kafkaConsumerOptions: MLKafkaJsonConsumerOptions = {
-    kafkaBrokerList: KAFKA_URL,
-    kafkaGroupId: `${BC_NAME}_${APP_NAME}`
-};
 
 let globalLogger: ILogger;
+
+let fxSvcEvtHandler: FXServiceEventHandler;
 
 
 export class Service {
@@ -116,8 +116,6 @@ export class Service {
     static expressServer: Server;
     static logger: ILogger;
     static auditClient: IAuditClient;
-    static messageProducer: IMessageProducer;
-    static messageConsumer: IMessageConsumer;
     static configClient: IConfigurationClient;
     static startupTimer: NodeJS.Timeout;
     static metrics: IMetrics;
@@ -126,10 +124,6 @@ export class Service {
         logger?: ILogger,
         configProvider?: IConfigProvider,
         auditClient?: IAuditClient,
-        messageProducer?: IMessageProducer,
-        messageConsumer?: IMessageConsumer,
-        configClient?: IConfigurationClient,
-        startupTimer?: NodeJS.Timeout,
         metrics?: IMetrics,
     ): Promise<void> {
         console.log(`Service starting with PID: ${process.pid}`);
@@ -195,28 +189,32 @@ export class Service {
         }
         this.metrics = metrics;
 
-        if (!messageProducer) {
-            const producerLogger = logger.createChild("producerLogger");
-            producerLogger.setLogLevel(LogLevel.INFO);
-            messageProducer = new MLKafkaJsonProducer(kafkaProducerOptions, producerLogger);
-            await messageProducer.connect();
-        }
-        this.messageProducer = messageProducer;
-
-        if(!messageConsumer){
-            const consumerHandlerLogger = logger.createChild("handlerConsumer");
-            consumerHandlerLogger.setLogLevel(LogLevel.INFO);
-            messageConsumer = new MLKafkaJsonConsumer(kafkaConsumerOptions, consumerHandlerLogger);
-        }
-        this.messageConsumer = messageConsumer;
-
         // Initiate event handlers
-        
+        await this.setupEventHandlers();
 
+        // Initiate express server
         await this.setupExpress();
 
         // remove startup timeout
         clearTimeout(this.startupTimer);
+    }
+
+    static async setupEventHandlers():Promise<void> {
+        const fxServiceConsumerOpts: MLKafkaJsonConsumerOptions = {
+            kafkaBrokerList: KAFKA_URL,
+            kafkaGroupId: `${BC_NAME}_${APP_NAME}_FXServiceEventHandler`,
+        };
+
+        fxSvcEvtHandler = new FXServiceEventHandler(
+            this.logger, 
+            fxServiceConsumerOpts, 
+            kafkaProducerOptions, 
+            [ForeignExchangeBCTopics.DomainEvents]
+        );
+
+        await Promise.all([
+            fxSvcEvtHandler.init()
+        ]);
     }
 
     static setupExpress(): Promise<void> {
@@ -262,10 +260,11 @@ export class Service {
             const closeExpress = util.promisify(this.expressServer.close.bind(this.expressServer));
             await closeExpress();
         }
-        if (this.messageProducer) await this.messageProducer.destroy();
-        if (this.auditClient) await this.auditClient.destroy();
-        // if (this.accountsBalancesAdapter) await this.accountsBalancesAdapter.destroy();
         if (this.logger && this.logger instanceof KafkaLogger) await this.logger.destroy();
+        if (this.auditClient) await this.auditClient.destroy();
+
+        // Destroy event handlers
+        await fxSvcEvtHandler.destroy();
     }
 }
 
