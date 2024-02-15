@@ -35,7 +35,7 @@
 "use strict";
 
 import {ILogger} from "@mojaloop/logging-bc-public-types-lib";
-import {MLKafkaJsonConsumerOptions, MLKafkaJsonProducerOptions} from "@mojaloop/platform-shared-lib-nodejs-kafka-client-lib";
+import { MLKafkaJsonConsumerOptions } from "@mojaloop/platform-shared-lib-nodejs-kafka-client-lib";
 import { BaseEventHandler, HandlerNames } from "./base_event_handler";
 import { IMessage } from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import {
