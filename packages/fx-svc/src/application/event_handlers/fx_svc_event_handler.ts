@@ -38,19 +38,37 @@ import {ILogger} from "@mojaloop/logging-bc-public-types-lib";
 import {MLKafkaJsonConsumerOptions, MLKafkaJsonProducerOptions} from "@mojaloop/platform-shared-lib-nodejs-kafka-client-lib";
 import { BaseEventHandler, HandlerNames } from "./base_event_handler";
 import { IMessage } from "@mojaloop/platform-shared-lib-messaging-types-lib";
+import {
+    FxQueryReceivedEvt,
+} from "@mojaloop/platform-shared-lib-public-messages-lib";
+import { FXSvcAggregate } from "../../domain/aggregates/fx_svc_agg";
+
 
 export class FXServiceEventHandler extends BaseEventHandler {
 
     constructor(
         logger: ILogger,
         consumerOptions: MLKafkaJsonConsumerOptions,
-        producerOptions: MLKafkaJsonProducerOptions,
         kafkaTopics : string[],
+        fxSvcAggregate: FXSvcAggregate
     ) {
-        super(logger, consumerOptions, producerOptions, kafkaTopics, HandlerNames.FXService);
+        super(logger, consumerOptions, kafkaTopics, HandlerNames.FXService, fxSvcAggregate);
     }
 
-    async processMessage(sourceMessage: IMessage): Promise<void> {
-        // Not implemented yet
+    async processMessage(message: IMessage): Promise<void> {
+        try {
+            switch(message.msgName) {
+                case FxQueryReceivedEvt.name:
+                    this._fxSvcAggregate.handleFxQueryReceivedEvt(new FxQueryReceivedEvt(message.payload));
+                    break;
+                default:
+                    this._logger.warn(`Cannot handle message of type: ${message.msgName}, ignoring`);
+                    break;
+            }
+
+        } catch(err: unknown) {
+            const error = (err as Error);
+            this._logger.error(err, `FXServiceEventHandler - Error: ${error.message || error.toString()}`);
+        }
     }
 }

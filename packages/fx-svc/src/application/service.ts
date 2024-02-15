@@ -41,9 +41,10 @@ import {KafkaLogger} from "@mojaloop/logging-bc-client-lib";
 import {ILogger, LogLevel} from "@mojaloop/logging-bc-public-types-lib";
 import {
     MLKafkaJsonConsumer, 
-    MLKafkaJsonConsumerOptions, 
-    MLKafkaJsonProducer, 
-    MLKafkaJsonProducerOptions
+    MLKafkaJsonConsumerOptions,
+} from "@mojaloop/platform-shared-lib-nodejs-kafka-client-lib";
+import { 
+    MLKafkaJsonProducer,
 } from "@mojaloop/platform-shared-lib-nodejs-kafka-client-lib";
 import {
     DefaultConfigProvider,
@@ -65,6 +66,11 @@ import {PrometheusMetrics} from "@mojaloop/platform-shared-lib-observability-cli
 
 import { ForeignExchangeBCTopics } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { FXServiceEventHandler } from "./event_handlers/fx_svc_event_handler";
+import { IParticipantsServiceAdapter } from "../domain/interfaces";
+import { IAuthenticatedHttpRequester } from "@mojaloop/security-bc-public-types-lib";
+import { ParticipantAdapter } from "../implementations/participant_adapter";
+
+import { FXSvcAggregate } from "../domain/aggregates/fx_svc_agg";
 
 import {Server} from "net";
 import * as util from "util";
@@ -92,12 +98,15 @@ const AUTH_N_SVC_BASEURL = process.env["AUTH_N_SVC_BASEURL"] || "http://localhos
 // TODO this should not be known here, libs that use the base should add the suffix
 const AUTH_N_SVC_TOKEN_URL = AUTH_N_SVC_BASEURL + "/token";
 
-const SVC_CLIENT_ID = process.env["SVC_CLIENT_ID"] || "participants-bc-participants-svc";
+const SVC_CLIENT_ID = process.env["SVC_CLIENT_ID"] || "foreign-exchange-bc-fx-svc";
 const SVC_CLIENT_SECRET = process.env["SVC_CLIENT_SECRET"] || "superServiceSecret";
 
 const KAFKA_AUDITS_TOPIC = process.env["KAFKA_AUDITS_TOPIC"] || "audits";
 const KAFKA_LOGS_TOPIC = process.env["KAFKA_LOGS_TOPIC"] || "logs";
 const AUDIT_KEY_FILE_PATH = process.env["AUDIT_KEY_FILE_PATH"] || "/app/data/audit_private_key.pem";
+
+const PARTICIPANTS_SVC_URL = process.env["PARTICIPANTS_SVC_URL"] || "http://localhost:3010";
+const PARTICIPANTS_CACHE_TIMEOUT_MS = (process.env["PARTICIPANTS_CACHE_TIMEOUT_MS"] && parseInt(process.env["PARTICIPANTS_CACHE_TIMEOUT_MS"])) || 5 * 60 * 1000;
 
 const SVC_DEFAULT_HTTP_PORT = 4000;
 
@@ -119,12 +128,17 @@ export class Service {
     static configClient: IConfigurationClient;
     static startupTimer: NodeJS.Timeout;
     static metrics: IMetrics;
+    static producer: MLKafkaJsonProducer;
+    static fxSvcAggregate: FXSvcAggregate;
+    static participantService: IParticipantsServiceAdapter;
 
     static async start(
         logger?: ILogger,
         configProvider?: IConfigProvider,
         auditClient?: IAuditClient,
         metrics?: IMetrics,
+        participantService?: IParticipantsServiceAdapter,
+        fxSvcAggregate?: FXSvcAggregate
     ): Promise<void> {
         console.log(`Service starting with PID: ${process.pid}`);
 
@@ -179,7 +193,7 @@ export class Service {
         }
         this.auditClient = auditClient;
 
-        if(!metrics){
+        if (!metrics) {
             const labels: Map<string, string> = new Map<string, string>();
             labels.set("bc", BC_NAME);
             labels.set("app", APP_NAME);
@@ -188,6 +202,34 @@ export class Service {
             metrics = PrometheusMetrics.getInstance();
         }
         this.metrics = metrics;
+
+        // Setup participant adapter
+        if (!participantService) {
+            const participantLogger = logger.createChild("participantLogger");
+            participantLogger.setLogLevel(LogLevel.INFO);
+
+            const authRequester: IAuthenticatedHttpRequester = new AuthenticatedHttpRequester(logger, AUTH_N_SVC_TOKEN_URL);
+            authRequester.setAppCredentials(SVC_CLIENT_ID, SVC_CLIENT_SECRET);
+            participantService = new ParticipantAdapter(
+                participantLogger, 
+                PARTICIPANTS_SVC_URL, 
+                authRequester, 
+                PARTICIPANTS_CACHE_TIMEOUT_MS,
+            );
+        }
+        this.participantService = participantService;
+
+        this.producer = new MLKafkaJsonProducer(kafkaProducerOptions);
+        await this.producer.connect();
+
+        // Setup aggregates
+        if (!fxSvcAggregate) {
+            this.fxSvcAggregate = new FXSvcAggregate(
+                this.logger,
+                this.producer,
+                this.participantService
+            );
+        }
 
         // Initiate event handlers
         await this.setupEventHandlers();
@@ -207,9 +249,9 @@ export class Service {
 
         fxSvcEvtHandler = new FXServiceEventHandler(
             this.logger, 
-            fxServiceConsumerOpts, 
-            kafkaProducerOptions, 
-            [ForeignExchangeBCTopics.DomainEvents]
+            fxServiceConsumerOpts,  
+            [ForeignExchangeBCTopics.DomainEvents],
+            this.fxSvcAggregate,
         );
 
         await Promise.all([
@@ -262,6 +304,7 @@ export class Service {
         }
         if (this.logger && this.logger instanceof KafkaLogger) await this.logger.destroy();
         if (this.auditClient) await this.auditClient.destroy();
+        if (this.producer) await this.producer.destroy();
 
         // Destroy event handlers
         await fxSvcEvtHandler.destroy();

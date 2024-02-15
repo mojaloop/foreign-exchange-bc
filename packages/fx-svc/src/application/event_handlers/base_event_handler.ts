@@ -32,14 +32,12 @@ optionally within square brackets <email>.
 "use strict";
 
 import { ILogger } from "@mojaloop/logging-bc-public-types-lib";
-import { IDomainMessage, IMessage } from "@mojaloop/platform-shared-lib-messaging-types-lib";
+import { IMessage } from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import { 
     MLKafkaJsonConsumer,
     MLKafkaJsonConsumerOptions,
-    MLKafkaJsonProducer,
-    MLKafkaJsonProducerOptions
 } from "@mojaloop/platform-shared-lib-nodejs-kafka-client-lib";
-// import { IParticipantServiceAdapter } from "../interfaces/infrastructure";
+import { FXSvcAggregate } from "../../domain/aggregates/fx_svc_agg";
 
 
 export const HandlerNames = {
@@ -47,31 +45,27 @@ export const HandlerNames = {
 };
 
 export abstract class BaseEventHandler  {
-    protected readonly _logger:ILogger;
+    protected readonly _logger: ILogger;
     protected readonly _consumerOpts: MLKafkaJsonConsumerOptions;
     protected readonly _kafkaTopics: string[];
-    protected readonly _producerOptions: MLKafkaJsonProducerOptions;
-    // protected readonly _participantService: IParticipantServiceAdapter;
     protected readonly _kafkaConsumer: MLKafkaJsonConsumer;
-    protected readonly _kafkaProducer: MLKafkaJsonProducer;
     protected readonly _handlerName: string;
+    protected readonly _fxSvcAggregate: FXSvcAggregate;
 
     constructor(
-            logger: ILogger,
-            consumerOptions: MLKafkaJsonConsumerOptions,
-            producerOptions: MLKafkaJsonProducerOptions,
-            kafkaTopics : string[],
-            // participantService: IParticipantServiceAdapter,
-            handlerName: string,
+        logger: ILogger,
+        consumerOptions: MLKafkaJsonConsumerOptions,
+        kafkaTopics : string[],
+        handlerName: string,
+        fxSvcAggregate: FXSvcAggregate
     ) {
         this._logger = logger.createChild(this.constructor.name);
         this._consumerOpts = consumerOptions;
-        this._producerOptions = producerOptions;
         this._kafkaTopics = kafkaTopics;
-        // this._participantService = participantService;
         this._handlerName = handlerName;
+        this._fxSvcAggregate = fxSvcAggregate;
+
         this._kafkaConsumer = new MLKafkaJsonConsumer(this._consumerOpts, this._logger);
-        this._kafkaProducer = new MLKafkaJsonProducer(this._producerOptions);
     }
 
     async init () : Promise<void> {
@@ -81,7 +75,6 @@ export abstract class BaseEventHandler  {
             this._kafkaConsumer.setCallbackFn(this.processMessage.bind(this));
             await this._kafkaConsumer.connect();
             await this._kafkaConsumer.startAndWaitForRebalance();
-            await this._kafkaProducer.connect();
 
             this._logger.info("Event handler started.");
             
@@ -92,7 +85,6 @@ export abstract class BaseEventHandler  {
     }
 
     async destroy(): Promise<void> {
-        await this._kafkaProducer.destroy();
         await this._kafkaConsumer.destroy(true);
     }
 

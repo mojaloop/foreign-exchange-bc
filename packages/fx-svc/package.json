@@ -46,6 +46,8 @@
         "@mojaloop/platform-shared-lib-public-messages-lib": "~0.5.10",
         "@mojaloop/security-bc-client-lib": "~0.5.7",
         "@mojaloop/auditing-bc-client-lib": "~0.5.1",
+        "@mojaloop/participants-bc-client-lib": "~0.5.2",
+        "@mojaloop/participant-bc-public-types-lib": "~0.5.4",
         "express": "^4.18.2"
     },
     "devDependencies": {
