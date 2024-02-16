@@ -1,5 +1,5 @@
 {
-    "name": "@mojaloop/f-svc",
+    "name": "@mojaloop/foreign-exchange-bc-foreign-exchange-svc",
     "version": "0.0.1",
     "description": "mojaloop foreign-exchange-bc service",
     "license": "Apache-2.0",
@@ -14,8 +14,8 @@
     "contributors": [
         "Pedro Sousa Barreto <pedrosousabarreto@gmail.com>"
     ],
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "main": "./dist/application/index.js",
+    "types": "./dist/application/index.d.ts",
     "files": [
         "/dist"
     ],

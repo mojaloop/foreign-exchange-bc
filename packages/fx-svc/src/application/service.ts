@@ -31,7 +31,7 @@
 "use strict";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const packageJSON = require("../package.json");
+const packageJSON = require("../../package.json");
 
 import express, {Express} from "express";
 import {ExpressRoutes} from "./routes";
@@ -52,6 +52,7 @@ import {
 } from "@mojaloop/platform-configuration-bc-client-lib";
 import {
     AuthenticatedHttpRequester,
+    AuthorizationClient
 } from "@mojaloop/security-bc-client-lib";
 import {
     AuditClient,
@@ -69,7 +70,9 @@ import { FXServiceEventHandler } from "./event_handlers/fx_svc_event_handler";
 import { IParticipantsServiceAdapter } from "../domain/interfaces";
 import { IAuthenticatedHttpRequester } from "@mojaloop/security-bc-public-types-lib";
 import { ParticipantAdapter } from "../implementations/participant_adapter";
+import { IAuthorizationClient } from "@mojaloop/security-bc-public-types-lib";
 
+import { FXPrivilegesDef } from "../domain/privileges";
 import { FXSvcAggregate } from "../domain/aggregates/fx_svc_agg";
 
 import {Server} from "net";
@@ -81,7 +84,7 @@ import { GetFXConfigSet } from "./config";
 
 // constants
 const BC_NAME = "foreign-exchange-bc";
-const APP_NAME = "fx-svc";
+const APP_NAME = "foreign-exchange-svc";
 const APP_VERSION = packageJSON.version;
 // configs - non-constants
 const ENV_NAME = process.env["ENV_NAME"] || "dev";
@@ -98,7 +101,9 @@ const AUTH_N_SVC_BASEURL = process.env["AUTH_N_SVC_BASEURL"] || "http://localhos
 // TODO this should not be known here, libs that use the base should add the suffix
 const AUTH_N_SVC_TOKEN_URL = AUTH_N_SVC_BASEURL + "/token";
 
-const SVC_CLIENT_ID = process.env["SVC_CLIENT_ID"] || "foreign-exchange-bc-fx-svc";
+const AUTH_Z_SVC_BASEURL = process.env["AUTH_Z_SVC_BASEURL"] || "http://localhost:3202";
+
+const SVC_CLIENT_ID = process.env["SVC_CLIENT_ID"] || "foreign-exchange-bc-foreign-exchange-svc";
 const SVC_CLIENT_SECRET = process.env["SVC_CLIENT_SECRET"] || "superServiceSecret";
 
 const KAFKA_AUDITS_TOPIC = process.env["KAFKA_AUDITS_TOPIC"] || "audits";
@@ -108,7 +113,7 @@ const AUDIT_KEY_FILE_PATH = process.env["AUDIT_KEY_FILE_PATH"] || "/app/data/aud
 const PARTICIPANTS_SVC_URL = process.env["PARTICIPANTS_SVC_URL"] || "http://localhost:3010";
 const PARTICIPANTS_CACHE_TIMEOUT_MS = (process.env["PARTICIPANTS_CACHE_TIMEOUT_MS"] && parseInt(process.env["PARTICIPANTS_CACHE_TIMEOUT_MS"])) || 5 * 60 * 1000;
 
-const SVC_DEFAULT_HTTP_PORT = 4000;
+const SVC_DEFAULT_HTTP_PORT = 3400;
 
 // Kafka options
 const kafkaProducerOptions = {
@@ -126,6 +131,7 @@ export class Service {
     static logger: ILogger;
     static auditClient: IAuditClient;
     static configClient: IConfigurationClient;
+    static authorizationClient: IAuthorizationClient;
     static startupTimer: NodeJS.Timeout;
     static metrics: IMetrics;
     static producer: MLKafkaJsonProducer;
@@ -137,6 +143,7 @@ export class Service {
         configProvider?: IConfigProvider,
         auditClient?: IAuditClient,
         metrics?: IMetrics,
+        authorizationClient?: IAuthorizationClient,
         participantService?: IParticipantsServiceAdapter,
         fxSvcAggregate?: FXSvcAggregate
     ): Promise<void> {
@@ -202,6 +209,38 @@ export class Service {
             metrics = PrometheusMetrics.getInstance();
         }
         this.metrics = metrics;
+
+        // authorization client
+        if (!authorizationClient) {
+            // create the instance of IAuthenticatedHttpRequester
+            const authRequester = new AuthenticatedHttpRequester(logger, AUTH_N_SVC_TOKEN_URL);
+            authRequester.setAppCredentials(SVC_CLIENT_ID, SVC_CLIENT_SECRET);
+
+            const messageConsumer = new MLKafkaJsonConsumer(
+                {
+                    kafkaBrokerList: KAFKA_URL,
+                    kafkaGroupId: `${BC_NAME}_${APP_NAME}_authz_client`
+                }, logger.createChild("authorizationClientConsumer")
+            );
+
+            // setup privileges - bootstrap app privs and get priv/role associations
+            authorizationClient = new AuthorizationClient(
+                BC_NAME, 
+                APP_NAME, 
+                APP_VERSION,
+                AUTH_Z_SVC_BASEURL, 
+                logger.createChild("AuthorizationClient"),
+                authRequester,
+                messageConsumer
+            );
+
+            authorizationClient.addPrivilegesArray(FXPrivilegesDef);
+            await (authorizationClient as AuthorizationClient).bootstrap(true);
+            await (authorizationClient as AuthorizationClient).fetch();
+            // init message consumer to automatically update on role changed events
+            await (authorizationClient as AuthorizationClient).init();
+        }
+        this.authorizationClient = authorizationClient;
 
         // Setup participant adapter
         if (!participantService) {
