@@ -42,7 +42,12 @@ import {
     FxQueryReceivedEvt,
     FxQueryResponseEvtPayload,
     FxQueryResponseEvt,
+    ForeignExchangeBCInvalidMessagePayloadErrorPayload,
+    ForeignExchangeBCInvalidMessagePayloadErrorEvent,
+    ForeignExchangeBCInvalidMessageTypeErrorPayload,
+    ForeignExchangeBCInvalidMessageTypeErrorEvent
 } from "@mojaloop/platform-shared-lib-public-messages-lib";
+import { IMessage, DomainEventMsg, MessageTypes } from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import { IParticipantsServiceAdapter } from "../../domain/interfaces";
 import { ParticipantTypes } from "@mojaloop/participant-bc-public-types-lib";
 
@@ -62,7 +67,7 @@ export class FXSvcAggregate {
         this._participantService = participantService;
     }
 
-    async handleFxQueryReceivedEvt(message: FxQueryReceivedEvt): Promise<void> {
+    async handleFxQueryReceivedEvt(message: FxQueryReceivedEvt, fspiopOpaqueState: any): Promise<void> {
         try {
             message.validatePayload();
 
@@ -87,11 +92,48 @@ export class FXSvcAggregate {
                 requesterFspId: message.payload.requesterFspId,
                 providers: providers
             };
-            await this._messageProducer.send(new FxQueryResponseEvt(payload));
+            const event = new FxQueryResponseEvt(payload);
+            event.fspiopOpaqueState = fspiopOpaqueState;
+            await this._messageProducer.send(event);
 
         } catch(err: unknown) {
             this._logger.error(err, "_handleFxQueryReceivedEvt -> error");
             throw new Error("_handleFxQueryReceivedEvt -> error");
+        }
+    }
+
+    async validateMessageOrGetErrorEvent(message: IMessage, fspiopOpaqueState: any): Promise<void> {
+		const requesterFspId = message.payload?.requesterFspId ?? null;
+
+        let errEvt: DomainEventMsg | null = null;
+        let errorMessage: string = "";
+
+		if (!message.payload) {
+			errorMessage = "Message payload is null or undefined";
+
+			const errPayload: ForeignExchangeBCInvalidMessagePayloadErrorPayload = {
+				requesterFspId: requesterFspId,
+				errorDescription: errorMessage,
+			};
+
+			errEvt = new ForeignExchangeBCInvalidMessagePayloadErrorEvent(errPayload);
+
+		} else if (message.msgType !== MessageTypes.DOMAIN_EVENT) {
+			errorMessage = `Message type is invalid ${message.msgType}`;
+
+			const errPayload: ForeignExchangeBCInvalidMessageTypeErrorPayload = {
+				requesterFspId: requesterFspId,
+				errorDescription: errorMessage,
+			};
+
+			errEvt = new ForeignExchangeBCInvalidMessageTypeErrorEvent(errPayload);
+		}
+
+		if (errEvt) {
+            errEvt.fspiopOpaqueState = fspiopOpaqueState;
+            await this._messageProducer.send(errEvt);
+
+            throw new Error(errorMessage);
         }
     }
 }

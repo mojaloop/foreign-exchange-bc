@@ -56,10 +56,15 @@ export class FXServiceEventHandler extends BaseEventHandler {
     }
 
     async processMessage(message: IMessage): Promise<void> {
+        const fspiopOpaqueState = message.fspiopOpaqueState;
+
         try {
+            // Validate message for error
+            await this._fxSvcAggregate.validateMessageOrGetErrorEvent(message, fspiopOpaqueState);
+
             switch(message.msgName) {
                 case FxQueryReceivedEvt.name:
-                    this._fxSvcAggregate.handleFxQueryReceivedEvt(new FxQueryReceivedEvt(message.payload));
+                    this._fxSvcAggregate.handleFxQueryReceivedEvt(new FxQueryReceivedEvt(message.payload), fspiopOpaqueState);
                     break;
                 default:
                     this._logger.warn(`Cannot handle message of type: ${message.msgName}, ignoring`);
