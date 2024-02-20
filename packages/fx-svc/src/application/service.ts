@@ -117,7 +117,8 @@ const SVC_DEFAULT_HTTP_PORT = 3400;
 
 // Kafka options
 const kafkaProducerOptions = {
-    kafkaBrokerList: KAFKA_URL
+    kafkaBrokerList: KAFKA_URL,
+    producerClientId: `${BC_NAME}_${APP_NAME}`,
 };
 
 let globalLogger: ILogger;
@@ -288,8 +289,8 @@ export class Service {
 
         fxSvcEvtHandler = new FXServiceEventHandler(
             this.logger, 
-            fxServiceConsumerOpts,  
-            [ForeignExchangeBCTopics.DomainEvents],
+            fxServiceConsumerOpts,
+            [ForeignExchangeBCTopics.DomainRequests],
             this.fxSvcAggregate,
         );
 

@@ -30,8 +30,11 @@
 
 "use strict";
 
-import { ParticipantSearchResults } from "../domain/types";
+import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
 
-export interface IParticipantsServiceAdapter {
-    getAllParticipants(): Promise<ParticipantSearchResults | null>;
+export declare type ParticipantSearchResults = {
+	pageSize: number;
+	totalPages: number;
+	pageIndex: number;
+	items: IParticipant[];
 }

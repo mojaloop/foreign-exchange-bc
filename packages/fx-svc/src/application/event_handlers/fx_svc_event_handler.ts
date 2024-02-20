@@ -56,6 +56,8 @@ export class FXServiceEventHandler extends BaseEventHandler {
     }
 
     async processMessage(message: IMessage): Promise<void> {
+        this._logger.info(`Got message in FXServiceEventHandler - msgName: ${message.msgName}`);
+
         const fspiopOpaqueState = message.fspiopOpaqueState;
 
         try {

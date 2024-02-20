@@ -34,7 +34,7 @@
 
 import { ILogger } from "@mojaloop/logging-bc-public-types-lib";
 import { ParticipantsHttpClient } from "@mojaloop/participants-bc-client-lib";
-import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
+import { ParticipantSearchResults } from "../domain/types";
 import { IParticipantsServiceAdapter } from "../domain/interfaces";
 import { IAuthenticatedHttpRequester } from "@mojaloop/security-bc-public-types-lib";
 
@@ -60,13 +60,13 @@ export class ParticipantAdapter implements IParticipantsServiceAdapter {
         this._externalParticipantClient = new ParticipantsHttpClient(this._logger, this._clientBaseUrl, this._authRequester, this._timeoutMs);
     }
 
-    async getAllParticipants(): Promise<IParticipant[] | null> {
+    async getAllParticipants(): Promise<ParticipantSearchResults | null> {
         try {
             const result = await this._externalParticipantClient.getAllParticipants();
-            return result;
+            return result as unknown as ParticipantSearchResults;
 
         } catch (err: unknown) {
-            this._logger.error(err, `getAllParticipants: error getting all participants`);
+            this._logger.error("getAllParticipants -> error: ", err);
             return null;
         }
     }

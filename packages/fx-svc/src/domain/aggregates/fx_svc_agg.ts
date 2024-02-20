@@ -68,6 +68,8 @@ export class FXSvcAggregate {
     }
 
     async handleFxQueryReceivedEvt(message: FxQueryReceivedEvt, fspiopOpaqueState: any): Promise<void> {
+        this._logger.info(`Started handling the event - ${message.msgName}`);
+
         try {
             message.validatePayload();
 
@@ -75,15 +77,15 @@ export class FXSvcAggregate {
 
             // Filter out participants that provide FX service
             let providers: string[];
-            if (!participants) {
+            if (!participants || !participants.items || participants.items.length < 1) {
                 providers = [];
             } else {
-                const fxpList = participants.filter((participant) => {
+                const fxpList = participants.items.filter((participant) => {
                     return participant.type === ParticipantTypes.FXP;
                 });
 
                 providers = fxpList.map((fxp) => {
-                    return fxp.name;
+                    return fxp.id;
                 });
             }
 
@@ -96,9 +98,11 @@ export class FXSvcAggregate {
             event.fspiopOpaqueState = fspiopOpaqueState;
             await this._messageProducer.send(event);
 
+            this._logger.info(`Sent message with the event - ${event.msgName}`);
+
         } catch(err: unknown) {
-            this._logger.error(err, "_handleFxQueryReceivedEvt -> error");
-            throw new Error("_handleFxQueryReceivedEvt -> error");
+            this._logger.error(err);
+            throw new Error(`handleFxQueryReceivedEvt -> ${(err as Error).message}`);
         }
     }
 
