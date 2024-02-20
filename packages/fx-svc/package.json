@@ -1,5 +1,5 @@
 {
-    "name": "@mojaloop/f-svc",
+    "name": "@mojaloop/foreign-exchange-bc-foreign-exchange-svc",
     "version": "0.0.1",
     "description": "mojaloop foreign-exchange-bc service",
     "license": "Apache-2.0",
@@ -14,8 +14,8 @@
     "contributors": [
         "Pedro Sousa Barreto <pedrosousabarreto@gmail.com>"
     ],
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "main": "./dist/application/index.js",
+    "types": "./dist/application/index.d.ts",
     "files": [
         "/dist"
     ],
@@ -37,22 +37,30 @@
         "dep:update": "ncu -u"
     },
     "dependencies": {
-        "@mojaloop/logging-bc-client-lib": "^0.1.17",
-        "@mojaloop/platform-configuration-bc-client-lib": "~0.1.18",
-        "@mojaloop/platform-configuration-bc-public-types-lib": "0.2.1",
+        "@mojaloop/logging-bc-client-lib": "~0.5.2",
+        "@mojaloop/platform-configuration-bc-client-lib": "~0.5.2",
+        "@mojaloop/platform-configuration-bc-public-types-lib": "~0.5.2",
+        "@mojaloop/auditing-bc-public-types-lib": "~0.5.1",
+        "@mojaloop/platform-shared-lib-observability-types-lib": "~0.5.2",
+        "@mojaloop/platform-shared-lib-observability-client-lib": "~0.5.1",
+        "@mojaloop/platform-shared-lib-public-messages-lib": "~0.5.10",
+        "@mojaloop/security-bc-client-lib": "~0.5.7",
+        "@mojaloop/auditing-bc-client-lib": "~0.5.1",
+        "@mojaloop/participants-bc-client-lib": "~0.5.2",
+        "@mojaloop/participant-bc-public-types-lib": "~0.5.4",
         "express": "^4.18.2"
     },
     "devDependencies": {
-        "@mojaloop/logging-bc-public-types-lib": "^0.1.14",
-        "@types/express": "^4.17.17",
-        "@types/jest": "^29.4.0",
+        "@mojaloop/logging-bc-public-types-lib": "^0.1.23",
+        "@types/express": "^4.17.21",
+        "@types/jest": "^29.4.4",
         "@types/node": "^18.11.19",
         "@types/node-cache": "^4.2.5",
         "@typescript-eslint/eslint-plugin": "^5.50.0",
         "@typescript-eslint/parser": "^5.50.0",
         "eslint": "^8.33.0",
-        "jest": "^29.4.1",
-        "npm-check-updates": "^16.6.3",
+        "jest": "^29.4.3",
+        "npm-check-updates": "^16.6.5",
         "ts-jest": "^29.0.5",
         "typescript": "^4.9.5"
     },

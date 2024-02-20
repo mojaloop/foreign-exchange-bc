@@ -30,21 +30,14 @@
 
 "use strict";
 
-import { ConfigurationClient, IConfigProvider } from "@mojaloop/platform-configuration-bc-client-lib";
-// import {ConfigParameterTypes} from "@mojaloop/platform-configuration-bc-public-types-lib";
-
-// configs - constants / code dependent
-const CONFIGSET_VERSION = "0.0.1";
-
-export function GetFXConfigSet(
-    configProvider: IConfigProvider,
-    bcName:string,
-    appName:string,
-    appVersion:string
-): ConfigurationClient {
-    const configClient = new ConfigurationClient(
-        bcName, appName, appVersion, CONFIGSET_VERSION, configProvider
-    );
-
-    return configClient;
+export enum FXPrivileges {
+    VIEW_PARTICIPANT= "VIEW_PARTICIPANT",
 }
+
+export const FXPrivilegesDef = [
+    {
+        privId: FXPrivileges.VIEW_PARTICIPANT,
+        labelName: "View Participant",
+        description: "Allows retrieving the list of participants and individual participant records"
+    }
+];
