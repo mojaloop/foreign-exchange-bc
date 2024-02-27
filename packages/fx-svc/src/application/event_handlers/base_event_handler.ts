@@ -50,20 +50,17 @@ export abstract class BaseEventHandler  {
     protected readonly _kafkaTopics: string[];
     protected readonly _kafkaConsumer: MLKafkaJsonConsumer;
     protected readonly _handlerName: string;
-    protected readonly _fxSvcAggregate: FXSvcAggregate;
 
     constructor(
         logger: ILogger,
         consumerOptions: MLKafkaJsonConsumerOptions,
         kafkaTopics : string[],
         handlerName: string,
-        fxSvcAggregate: FXSvcAggregate
     ) {
         this._logger = logger.createChild(this.constructor.name);
         this._consumerOpts = consumerOptions;
         this._kafkaTopics = kafkaTopics;
         this._handlerName = handlerName;
-        this._fxSvcAggregate = fxSvcAggregate;
 
         this._kafkaConsumer = new MLKafkaJsonConsumer(this._consumerOpts, this._logger);
     }

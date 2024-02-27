@@ -37,6 +37,7 @@ import { ParticipantsHttpClient } from "@mojaloop/participants-bc-client-lib";
 import { ParticipantSearchResults } from "../domain/types";
 import { IParticipantsServiceAdapter } from "../domain/interfaces";
 import { IAuthenticatedHttpRequester } from "@mojaloop/security-bc-public-types-lib";
+import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
 
 export class ParticipantAdapter implements IParticipantsServiceAdapter {
     private readonly _logger: ILogger;
@@ -70,5 +71,16 @@ export class ParticipantAdapter implements IParticipantsServiceAdapter {
             return null;
         }
     }
+
+    async getParticipantInfo(fspId: string): Promise<IParticipant | null> {
+		try {
+			const result = await this._externalParticipantClient.getParticipantById(fspId);
+			return result;
+
+		} catch (err: unknown) {
+			this._logger.error("getParticipantInfo -> error: ", err);
+			return null;
+		}
+	}
 }
  
