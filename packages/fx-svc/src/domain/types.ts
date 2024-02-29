@@ -38,3 +38,7 @@ export declare type ParticipantSearchResults = {
 	pageIndex: number;
 	items: IParticipant[];
 }
+
+export interface IFxQuoteSchemeRules {
+    currencies: string[];
+}

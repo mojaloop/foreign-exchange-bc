@@ -60,25 +60,36 @@ import {
     FxQuoteRequiredDestinationParticipantIsNotApprovedErrorEvt,
     FxQuoteRequiredDestinationParticipantIsNotActiveErrorEvtPayload,
     FxQuoteRequiredDestinationParticipantIsNotActiveErrorEvt,
+    FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvtPayload,
+    FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvt,
+    FxQuoteBcQuoteExpiredErrorEvtPayload,
+    FxQuoteBcQuoteExpiredErrorEvt,
 } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { IMessage, DomainEventMsg, MessageTypes } from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
 import { IParticipantsServiceAdapter } from "../../domain/interfaces";
+import { IFxQuoteSchemeRules } from "../types";
 
 
 export class FXQuoteAggregate {
     private _logger: ILogger;
     private _messageProducer: MLKafkaJsonProducer;
     private _participantService: IParticipantsServiceAdapter;
+    private _schemeRules: IFxQuoteSchemeRules;
+    private _passThroughMode: boolean;
 
     constructor(
         logger: ILogger,
         messageProducer: MLKafkaJsonProducer,
         participantService: IParticipantsServiceAdapter,
+        schemeRules: IFxQuoteSchemeRules,
+        passThroughMode: boolean,
     ) {
         this._logger = logger;
         this._messageProducer = messageProducer;
         this._participantService = participantService;
+        this._schemeRules = schemeRules;
+        this._passThroughMode = passThroughMode;
     }
 
     async handleFxQuoteRequestReceivedEvt(message: FxQuoteRequestReceivedEvt): Promise<void> {
@@ -95,7 +106,17 @@ export class FXQuoteAggregate {
         try {
             message.validatePayload();
 
-            // ToDo: Check supported currencies for both source and target
+            // Check supported currencies for both source and target
+            const isSchemeValid = this.validateScheme(message);
+            if (!isSchemeValid) {
+                const errPayload: FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvtPayload = {
+                    conversionRequestId: conversionRequestId,
+                    errorDescription: `FxQuote request scheme validation failed for : ${conversionRequestId}`,
+                };
+
+                eventToPublish = new FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvt(errPayload);
+                return await this.publishEvent(eventToPublish, fspiopOpaqueState);
+            }
 
             eventToPublish = await this.validateRequesterFsp(requesterFspId, conversionRequestId);
             if (eventToPublish) {
@@ -110,6 +131,16 @@ export class FXQuoteAggregate {
                 await this.publishEvent(eventToPublish, fspiopOpaqueState);
                 return;
             }
+            
+            if (expirationDate) {
+                eventToPublish = this.validateFxQuoteExpirationDate(conversionRequestId, expirationDate);
+                if (eventToPublish) {
+                    // Send the error event
+                    await this.publishEvent(eventToPublish, fspiopOpaqueState);
+                    return;
+                }
+            }
+
             
 
         } catch(err: unknown) {
@@ -284,6 +315,69 @@ export class FXQuoteAggregate {
             };
             const errEvent = new FxQuoteRequiredDestinationParticipantIsNotActiveErrorEvt(errPayload);
             return errEvent;
+        }
+
+        return null;
+    }
+
+    private validateScheme(message: IMessage): boolean {
+        const sourceCurrency = message.payload.conversionTerms?.sourceAmount?.currency;
+        const targetCurrency = message.payload.conversionTerms?.targetAmount?.currency;
+
+        if (!sourceCurrency) {
+            this._logger.error("Source currency is not included in the request");
+            return false;
+        }
+        if (!targetCurrency) {
+            this._logger.error("Target currency is not included in the request");
+            return false;
+        }
+
+        const supportedCurrencies = this._schemeRules.currencies.map((currency) => currency.toLocaleLowerCase());
+
+        if (!supportedCurrencies.includes(sourceCurrency.toLocaleLowerCase())) {
+            this._logger.error("Source currency is not supported");
+            return false;
+        }
+        if (!supportedCurrencies.includes(targetCurrency.toLocaleLowerCase())) {
+            this._logger.error("Target currency is not supported");
+            return false;
+        }
+
+        return true;
+    }
+
+    private validateFxQuoteExpirationDate(conversionRequestId: string, expirationDate: string): DomainEventMsg | null {
+        let differenceDate = 0;
+
+        try {
+            const serverDateUtc = new Date().toISOString();
+            const serverDate = new Date(serverDateUtc);
+            const quoteDate = new Date(expirationDate);
+            differenceDate = quoteDate.getTime() - serverDate.getTime();
+
+        } catch(error: unknown) {
+            const errMsg = `Error parsing date for ${conversionRequestId}`;
+            this._logger.error(errMsg, error);
+
+            const errPayload: FxQuoteBcQuoteExpiredErrorEvtPayload = {
+                conversionRequestId: conversionRequestId,
+                expirationDate: expirationDate,
+                errorDescription: errMsg
+            };
+            return new FxQuoteBcQuoteExpiredErrorEvt(errPayload);
+        }
+
+        if (differenceDate < 0) {
+            const errMsg = `FX Quote with id ${conversionRequestId} has expired at ${expirationDate}`;
+            this._logger.error(errMsg);
+
+            const errPayload: FxQuoteBcQuoteExpiredErrorEvtPayload = {
+                conversionRequestId: conversionRequestId,
+                expirationDate: expirationDate,
+                errorDescription: errMsg
+            };
+            return new FxQuoteBcQuoteExpiredErrorEvt(errPayload);
         }
 
         return null;

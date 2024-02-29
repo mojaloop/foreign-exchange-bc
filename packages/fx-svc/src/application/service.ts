@@ -72,8 +72,10 @@ import { IAuthenticatedHttpRequester } from "@mojaloop/security-bc-public-types-
 import { ParticipantAdapter } from "../implementations/participant_adapter";
 import { IAuthorizationClient } from "@mojaloop/security-bc-public-types-lib";
 
+import { IFxQuoteSchemeRules } from "../domain/types";
 import { FXPrivilegesDef } from "../domain/privileges";
 import { FXSvcAggregate } from "../domain/aggregates/fx_svc_agg";
+import { FXQuoteAggregate } from "../domain/aggregates/fx_quote_agg";
 
 import {Server} from "net";
 import * as util from "util";
@@ -113,6 +115,8 @@ const AUDIT_KEY_FILE_PATH = process.env["AUDIT_KEY_FILE_PATH"] || "/app/data/aud
 const PARTICIPANTS_SVC_URL = process.env["PARTICIPANTS_SVC_URL"] || "http://localhost:3010";
 const PARTICIPANTS_CACHE_TIMEOUT_MS = (process.env["PARTICIPANTS_CACHE_TIMEOUT_MS"] && parseInt(process.env["PARTICIPANTS_CACHE_TIMEOUT_MS"])) || 5 * 60 * 1000;
 
+const PASS_THROUGH_MODE = (process.env["PASS_THROUGH_MODE"]=== "true" )? true : false;
+
 const SVC_DEFAULT_HTTP_PORT = 3400;
 
 // Kafka options
@@ -137,6 +141,7 @@ export class Service {
     static metrics: IMetrics;
     static producer: MLKafkaJsonProducer;
     static fxSvcAggregate: FXSvcAggregate;
+    static fxQuoteAggregate: FXQuoteAggregate;
     static participantService: IParticipantsServiceAdapter;
 
     static async start(
@@ -146,7 +151,8 @@ export class Service {
         metrics?: IMetrics,
         authorizationClient?: IAuthorizationClient,
         participantService?: IParticipantsServiceAdapter,
-        fxSvcAggregate?: FXSvcAggregate
+        fxSvcAggregate?: FXSvcAggregate,
+        fxQuoteAggregate?: FXQuoteAggregate,
     ): Promise<void> {
         console.log(`Service starting with PID: ${process.pid}`);
 
@@ -268,6 +274,21 @@ export class Service {
                 this.logger,
                 this.producer,
                 this.participantService
+            );
+        }
+
+        if (!fxQuoteAggregate) {
+            const currencies = this.configClient.globalConfigs.getCurrencies();
+            const schemeRules: IFxQuoteSchemeRules = {
+                currencies: currencies.map(currency => currency.code),
+            };
+
+            this.fxQuoteAggregate = new FXQuoteAggregate(
+                this.logger,
+                this.producer,
+                this.participantService,
+                schemeRules,
+                PASS_THROUGH_MODE
             );
         }
 
