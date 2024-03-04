@@ -30,17 +30,34 @@
 
 "use strict";
 
-import { ParticipantSearchResults } from "../domain/types";
-import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
-import { IFxQuote } from "../domain/types";
-
-export interface IParticipantsServiceAdapter {
-    getAllParticipants(): Promise<ParticipantSearchResults | null>;
-    getParticipantInfo(fspId: string): Promise<IParticipant | null>;
+// Database
+export class UnableToInitFxQuoteRegistryError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
 }
 
-export interface IFxQuoteRepo {
-    init(): Promise<void>;
-    destroy(): Promise<void>;
-    addFxQuote(fxQuote: IFxQuote): Promise<string>;
+export class UnableToCloseDatabaseConnectionError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
+}
+
+// fxQuote Repo
+export class UnableToGetFxQuoteError extends Error {
+    constructor(message?: string) {
+        super(message || "Unable to get the FX Quote");
+    }
+}
+
+export class FxQuoteAlreadyExistsError extends Error {
+    constructor(message?: string) {
+        super(message || "FX Quote already exists");
+    }
+}
+
+export class UnableToAddFxQuoteError extends Error {
+    constructor(message?: string) {
+        super(message || "Unable to insert the FX Quote");
+    }
 }

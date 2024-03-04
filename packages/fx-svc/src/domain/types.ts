@@ -32,6 +32,14 @@
 
 import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
 
+export enum FxQuoteStatus {
+    RECEIVED = "RECEIVED",
+    PENDING = "PENDING",
+    REJECTED = "REJECTED",
+    ACCEPTED = "ACCEPTED",
+    EXPIRED = "EXPIRED"
+}
+
 export declare type ParticipantSearchResults = {
 	pageSize: number;
 	totalPages: number;
@@ -41,4 +49,55 @@ export declare type ParticipantSearchResults = {
 
 export interface IFxQuoteSchemeRules {
     currencies: string[];
+}
+
+// FX Quote
+export type IAmountType = "SEND" | "RECEIVE";
+
+export interface IMoney {
+	currency: string;
+	amount: string | null;
+}
+
+export interface IFxChargeMoney {
+	currency: string;
+	amount: string;
+}
+
+export interface IFxCharge {
+	chargeType: string;
+	sourceAmount: IFxChargeMoney | null;
+	targetAmount: IFxChargeMoney | null;
+}
+
+export interface IExtensionList {
+    extension: { key: string; value: string;}[];
+}
+
+export interface IErrorInformation {
+    errorCode: string;
+    errorDescription: string;
+    extensionList: IExtensionList
+}
+
+export interface IConversionTerms {
+	conversionId: string;
+	determiningTransferId: string | null;
+	initiatingFsp: string;
+	counterPartyFsp: string;
+	amountType: IAmountType;
+	sourceAmount: IMoney;
+	targetAmount: IMoney;
+	expiration: string;
+	charges: IFxCharge[] | null;
+	extensionList: IExtensionList | null;
+}
+
+export interface IFxQuote {
+	createdAt: number;
+	updatedAt: number;
+	conversionRequestId: string;
+	conversionTerms: IConversionTerms;
+	status: FxQuoteStatus | null;
+	errorInformation: IErrorInformation | null;
 }

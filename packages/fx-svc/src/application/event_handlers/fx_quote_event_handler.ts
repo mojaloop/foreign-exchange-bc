@@ -40,6 +40,8 @@ import { BaseEventHandler, HandlerNames } from "./base_event_handler";
 import { IMessage } from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import {
     FxQuoteRequestReceivedEvt,
+    FxQuoteUnknownErrorEvent,
+    FxQuoteUnknownErrorPayload,
 } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { FXQuoteAggregate } from "../../domain/aggregates/fx_quote_agg";
 
@@ -61,10 +63,14 @@ export class FXQuoteEventHandler extends BaseEventHandler {
     async processMessage(message: IMessage): Promise<void> {
         this._logger.info(`Got message in FXServiceEventHandler - msgName: ${message.msgName}`);
 
-        try {
-            // Validate message for error
-            await this._aggregate.validateMessageOrGetErrorEvent(message);
+        // Validate message for error
+        const errEvent = this._aggregate.validateMessageOrGetErrorEvent(message);
+        if (errEvent) {
+            await this._aggregate.publishEvent(errEvent, message.fspiopOpaqueState);
+            return;
+        }
 
+        try {
             switch(message.msgName) {
                 case FxQuoteRequestReceivedEvt.name:
                     this._aggregate.handleFxQuoteRequestReceivedEvt(message as FxQuoteRequestReceivedEvt);
@@ -75,8 +81,17 @@ export class FXQuoteEventHandler extends BaseEventHandler {
             }
 
         } catch(err: unknown) {
-            const error = (err as Error);
-            this._logger.error(err, `FXQuoteEventHandler - Error: ${error.message || error.toString()}`);
+            const errMsg = `Error while handling the event: ${message.msgName}`;
+            this._logger.error(errMsg, err);
+
+            // Send back the default error event
+            const errPayload: FxQuoteUnknownErrorPayload = {
+                requesterFspId: message.fspiopOpaqueState?.requesterFspId ?? null,
+                conversionRequestId: message.payload?.conversionRequestId ?? null,
+                errorDescription: errMsg
+            };
+            const errEvent = new FxQuoteUnknownErrorEvent(errPayload);
+            await this._aggregate.publishEvent(errEvent, message.fspiopOpaqueState);
         }
     }
 }

@@ -77,6 +77,10 @@ import { FXPrivilegesDef } from "../domain/privileges";
 import { FXSvcAggregate } from "../domain/aggregates/fx_svc_agg";
 import { FXQuoteAggregate } from "../domain/aggregates/fx_quote_agg";
 
+import { MongoFxQuotesRepo } from "../implementations/mongo_fxquotes_repo";
+
+import { IFxQuoteRepo } from "../domain/interfaces";
+
 import {Server} from "net";
 import * as util from "util";
 
@@ -117,7 +121,11 @@ const PARTICIPANTS_CACHE_TIMEOUT_MS = (process.env["PARTICIPANTS_CACHE_TIMEOUT_M
 
 const PASS_THROUGH_MODE = (process.env["PASS_THROUGH_MODE"]=== "true" )? true : false;
 
-const SVC_DEFAULT_HTTP_PORT = 3400;
+// Express Server Port
+const SVC_DEFAULT_HTTP_PORT = process.env["SVC_DEFAULT_HTTP_PORT"] || 3400;
+
+// Database name
+const DB_NAME_FX_QUOTES = "fx_quoting";
 
 // Kafka options
 const kafkaProducerOptions = {
@@ -140,6 +148,7 @@ export class Service {
     static startupTimer: NodeJS.Timeout;
     static metrics: IMetrics;
     static producer: MLKafkaJsonProducer;
+    static fxQuotesRepo: IFxQuoteRepo;
     static fxSvcAggregate: FXSvcAggregate;
     static fxQuoteAggregate: FXQuoteAggregate;
     static participantService: IParticipantsServiceAdapter;
@@ -151,6 +160,7 @@ export class Service {
         metrics?: IMetrics,
         authorizationClient?: IAuthorizationClient,
         participantService?: IParticipantsServiceAdapter,
+        fxQuotesRepo?: IFxQuoteRepo,
         fxSvcAggregate?: FXSvcAggregate,
         fxQuoteAggregate?: FXQuoteAggregate,
     ): Promise<void> {
@@ -268,14 +278,21 @@ export class Service {
         this.producer = new MLKafkaJsonProducer(kafkaProducerOptions);
         await this.producer.connect();
 
+        // Setup database repositories
+        if (!fxQuotesRepo) {
+            fxQuotesRepo = new MongoFxQuotesRepo(this.logger, MONGO_URL, DB_NAME_FX_QUOTES);
+        }
+        this.fxQuotesRepo = fxQuotesRepo;
+
         // Setup aggregates
         if (!fxSvcAggregate) {
-            this.fxSvcAggregate = new FXSvcAggregate(
+            fxSvcAggregate = new FXSvcAggregate(
                 this.logger,
                 this.producer,
                 this.participantService
             );
         }
+        this.fxSvcAggregate = fxSvcAggregate;
 
         if (!fxQuoteAggregate) {
             const currencies = this.configClient.globalConfigs.getCurrencies();
@@ -283,14 +300,16 @@ export class Service {
                 currencies: currencies.map(currency => currency.code),
             };
 
-            this.fxQuoteAggregate = new FXQuoteAggregate(
+            fxQuoteAggregate = new FXQuoteAggregate(
                 this.logger,
+                this.fxQuotesRepo,
                 this.producer,
                 this.participantService,
                 schemeRules,
                 PASS_THROUGH_MODE
             );
         }
+        this.fxQuoteAggregate = fxQuoteAggregate;
 
         // Initiate event handlers
         await this.setupEventHandlers();

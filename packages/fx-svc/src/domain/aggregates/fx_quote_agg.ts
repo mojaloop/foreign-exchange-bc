@@ -64,15 +64,21 @@ import {
     FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvt,
     FxQuoteBcQuoteExpiredErrorEvtPayload,
     FxQuoteBcQuoteExpiredErrorEvt,
+    FxQuoteUnableToAddQuoteToDatabaseErrorEvtPayload,
+    FxQuoteUnableToAddQuoteToDatabaseErrorEvt,
+    FxQuoteRequestAcceptedEvtPayload,
+    FxQuoteRequestAcceptedEvt,
 } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { IMessage, DomainEventMsg, MessageTypes } from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
 import { IParticipantsServiceAdapter } from "../../domain/interfaces";
-import { IFxQuoteSchemeRules } from "../types";
+import { IFxQuoteRepo } from "../interfaces";
+import { IFxQuote, IFxQuoteSchemeRules, FxQuoteStatus } from "../types";
 
 
 export class FXQuoteAggregate {
     private _logger: ILogger;
+    private _fxQuotesRepo: IFxQuoteRepo;
     private _messageProducer: MLKafkaJsonProducer;
     private _participantService: IParticipantsServiceAdapter;
     private _schemeRules: IFxQuoteSchemeRules;
@@ -80,12 +86,14 @@ export class FXQuoteAggregate {
 
     constructor(
         logger: ILogger,
+        fxQuotesRepo: IFxQuoteRepo,
         messageProducer: MLKafkaJsonProducer,
         participantService: IParticipantsServiceAdapter,
         schemeRules: IFxQuoteSchemeRules,
         passThroughMode: boolean,
     ) {
         this._logger = logger;
+        this._fxQuotesRepo = fxQuotesRepo;
         this._messageProducer = messageProducer;
         this._participantService = participantService;
         this._schemeRules = schemeRules;
@@ -101,58 +109,115 @@ export class FXQuoteAggregate {
         const destinationFspId = message.payload.conversionTerms?.counterPartyFsp ?? fspiopOpaqueState.destinationFspId ?? null;
         const expirationDate = message.payload.conversionTerms?.expiration ?? null;
 
-        let eventToPublish: DomainEventMsg | null;
+        let eventToPublish: DomainEventMsg | null = null;
 
-        try {
-            message.validatePayload();
+        message.validatePayload();
 
-            // Check supported currencies for both source and target
-            const isSchemeValid = this.validateScheme(message);
-            if (!isSchemeValid) {
-                const errPayload: FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvtPayload = {
+        // Check supported currencies for both source and target
+        const isSchemeValid = this.validateScheme(message);
+        if (!isSchemeValid) {
+            const errPayload: FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvtPayload = {
+                conversionRequestId: conversionRequestId,
+                errorDescription: `FxQuote request scheme validation failed for : ${conversionRequestId}`,
+            };
+
+            eventToPublish = new FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvt(errPayload);
+            return await this.publishEvent(eventToPublish, fspiopOpaqueState);
+        }
+
+        eventToPublish = await this.validateRequesterFsp(requesterFspId, conversionRequestId);
+        if (eventToPublish) {
+            // Send the error event
+            await this.publishEvent(eventToPublish, fspiopOpaqueState);
+            return;
+        }
+
+        eventToPublish = await this.validateDestinationFsp(destinationFspId, conversionRequestId);
+        if (eventToPublish) {
+            // Send the error event
+            await this.publishEvent(eventToPublish, fspiopOpaqueState);
+            return;
+        }
+        
+        if (expirationDate) {
+            eventToPublish = this.validateFxQuoteExpirationDate(conversionRequestId, expirationDate);
+            if (eventToPublish) {
+                // Send the error event
+                await this.publishEvent(eventToPublish, fspiopOpaqueState);
+                return;
+            }
+        }
+
+        const now = Date.now();
+
+        const fxQuote: IFxQuote = {
+            createdAt: now,
+            updatedAt: now,
+            conversionRequestId: message.payload.conversionRequestId,
+            conversionTerms: {
+                conversionId: message.payload.conversionTerms.conversionId,
+                determiningTransferId: message.payload.conversionTerms.determiningTransferId,
+                initiatingFsp: message.payload.conversionTerms.initiatingFsp,
+                counterPartyFsp: message.payload.conversionTerms.counterPartyFsp,
+                amountType: message.payload.conversionTerms.amountType,
+                sourceAmount: message.payload.conversionTerms.sourceAmount,
+                targetAmount: message.payload.conversionTerms.targetAmount,
+                expiration: message.payload.conversionTerms.expiration,
+                charges: message.payload.conversionTerms.charges,
+                extensionList: message.payload.conversionTerms.extensionList,
+            },
+            status: FxQuoteStatus.PENDING,
+            errorInformation: null,
+        };
+
+        // Add the fxQuote in the database
+        if (!this._passThroughMode) {
+            try {
+                await this._fxQuotesRepo.addFxQuote(fxQuote);
+            } catch (err: unknown) {
+                const errMsg = `Unable to add FX Quote to database with ID: ${conversionRequestId}`;
+                this._logger.error(errMsg, err);
+
+                const errPayload: FxQuoteUnableToAddQuoteToDatabaseErrorEvtPayload = {
                     conversionRequestId: conversionRequestId,
-                    errorDescription: `FxQuote request scheme validation failed for : ${conversionRequestId}`,
+                    errorDescription: errMsg,
                 };
-
-                eventToPublish = new FxQuoteBCQuoteRuleSchemeViolatedRequestErrorEvt(errPayload);
-                return await this.publishEvent(eventToPublish, fspiopOpaqueState);
+                eventToPublish = new FxQuoteUnableToAddQuoteToDatabaseErrorEvt(errPayload);
             }
 
-            eventToPublish = await this.validateRequesterFsp(requesterFspId, conversionRequestId);
             if (eventToPublish) {
                 // Send the error event
                 await this.publishEvent(eventToPublish, fspiopOpaqueState);
                 return;
             }
+        }
 
-            eventToPublish = await this.validateDestinationFsp(destinationFspId, conversionRequestId);
-            if (eventToPublish) {
-                // Send the error event
-                await this.publishEvent(eventToPublish, fspiopOpaqueState);
-                return;
+        // Prepare to send the fxQuote to FSPIOP via producer
+        const payload: FxQuoteRequestAcceptedEvtPayload = {
+            conversionRequestId: conversionRequestId,
+            conversionTerms: {
+                conversionId: message.payload.conversionTerms.conversionId,
+                determiningTransferId: message.payload.conversionTerms.determiningTransferId,
+                initiatingFsp: message.payload.conversionTerms.initiatingFsp,
+                counterPartyFsp: message.payload.conversionTerms.counterPartyFsp,
+                amountType: message.payload.conversionTerms.amountType,
+                sourceAmount: message.payload.conversionTerms.sourceAmount,
+                targetAmount: message.payload.conversionTerms.targetAmount,
+                expiration: message.payload.conversionTerms.expiration,
+                charges: message.payload.conversionTerms.charges,
+                extensionList: message.payload.conversionTerms.extensionList,
             }
-            
-            if (expirationDate) {
-                eventToPublish = this.validateFxQuoteExpirationDate(conversionRequestId, expirationDate);
-                if (eventToPublish) {
-                    // Send the error event
-                    await this.publishEvent(eventToPublish, fspiopOpaqueState);
-                    return;
-                }
-            }
+        };
+        eventToPublish = new FxQuoteRequestAcceptedEvt(payload);
 
-            
-
-        } catch(err: unknown) {
-            this._logger.error(err);
-            throw new Error(`handleFxQuoteRequestReceivedEvt -> ${(err as Error).message}`);
+        if (eventToPublish) {
+            await this.publishEvent(eventToPublish, fspiopOpaqueState);
         }
     }
 
-    async validateMessageOrGetErrorEvent(message: IMessage): Promise<void> {
+    validateMessageOrGetErrorEvent(message: IMessage): DomainEventMsg | null {
 		const requesterFspId = message.payload?.requesterFspId ?? null;
         const conversionRequestId = message.payload?.conversionRequestId ?? null;
-        const fspiopOpaqueState = message.fspiopOpaqueState;
 
         let errEvt: DomainEventMsg | null = null;
         let errorMessage: string = "";
@@ -180,12 +245,7 @@ export class FXQuoteAggregate {
 			errEvt = new FxQuoteInvalidMessageTypeErrorEvent(errPayload);
 		}
 
-		if (errEvt) {
-            errEvt.fspiopOpaqueState = fspiopOpaqueState;
-            await this._messageProducer.send(errEvt);
-
-            throw new Error(errorMessage);
-        }
+		return errEvt;
     }
 
     private async validateRequesterFsp(
