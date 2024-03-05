@@ -43,6 +43,8 @@ import {
     UnableToGetFxQuoteError,
     FxQuoteAlreadyExistsError,
     UnableToAddFxQuoteError,
+    UnableToUpdateFxQuoteError,
+    FxQuoteNotFoundError,
 } from "./errors";
 import { IFxQuote } from "../domain/types";
 
@@ -88,6 +90,22 @@ export class MongoFxQuotesRepo implements IFxQuoteRepo {
         }
     }
 
+    async getFxQuoteById(conversionRequestId: string): Promise<IFxQuote | null> {
+        const fxQuote = await this.fxQuotes.findOne({
+            conversionRequestId: conversionRequestId
+        })
+        .catch((err: unknown) => {
+            this._logger.error(`Unable to get FX Quote Error: ${(err as Error).message}`);
+            throw new UnableToGetFxQuoteError();
+        });
+
+        if (fxQuote) {
+            return this.mapToFxQuote(fxQuote);
+        }
+
+        return fxQuote;
+    }
+
     async addFxQuote(fxQuote: IFxQuote): Promise<string> {
         if (fxQuote.conversionRequestId) {
             await this.checkFxQuoteExistence(fxQuote.conversionRequestId);
@@ -101,10 +119,28 @@ export class MongoFxQuotesRepo implements IFxQuoteRepo {
         return fxQuote.conversionRequestId;
     }
 
+    async updateQuote(fxQuote: IFxQuote): Promise<void> {
+        const existingFxQuote = await this.getFxQuoteById(fxQuote.conversionRequestId);
+        if (!existingFxQuote || !existingFxQuote.conversionRequestId) {
+            throw new FxQuoteNotFoundError();
+        }
+
+        await this.fxQuotes.updateOne({
+            conversionRequestId: fxQuote.conversionRequestId
+        }, {
+            $set: fxQuote
+        })
+        .catch((err: unknown) => {
+            this._logger.error(`Unable to update the FX Quote: ${(err as Error).message}`);
+            throw new UnableToUpdateFxQuoteError();
+        });
+    }
+
     private async checkFxQuoteExistence(conversionRequestId: string): Promise<void> {
         const existingFxQuote: WithId<Document> | null = await this.fxQuotes.findOne({
             conversionRequestId: conversionRequestId
-        }).catch((err: unknown) => {
+        })
+        .catch((err: unknown) => {
             this._logger.error(`Unable to get FX Quote Error: ${(err as Error).message}`);
             throw new UnableToGetFxQuoteError();
         });
@@ -112,5 +148,19 @@ export class MongoFxQuotesRepo implements IFxQuoteRepo {
         if (existingFxQuote) {
             throw new FxQuoteAlreadyExistsError();
         }
+    }
+
+    private mapToFxQuote(fxQuote: WithId<Document>): IFxQuote {
+        const mappedFxQuote: IFxQuote = {
+            createdAt: fxQuote.createdAt ?? null,
+            updatedAt: fxQuote.updatedAt ?? null,
+            conversionRequestId: fxQuote.conversionRequestId ?? null,
+            conversionTerms: fxQuote.conversionTerms ?? null,
+            condition: fxQuote.condition ?? null,
+            status: fxQuote.status ?? null,
+            errorInformation: fxQuote.errorInformation ?? null,
+        };
+
+        return mappedFxQuote;
     }
 }

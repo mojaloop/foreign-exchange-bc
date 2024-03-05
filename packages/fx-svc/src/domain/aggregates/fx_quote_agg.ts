@@ -68,6 +68,13 @@ import {
     FxQuoteUnableToAddQuoteToDatabaseErrorEvt,
     FxQuoteRequestAcceptedEvtPayload,
     FxQuoteRequestAcceptedEvt,
+    FxQuoteBCQuoteRuleSchemeViolatedResponseErrorEvtPayload,
+    FxQuoteBCQuoteRuleSchemeViolatedResponseErrorEvt,
+    FxQuoteResponseReceivedEvt,
+    FxQuoteUnableToUpdateQuoteToDatabaseErrorEvtPayload,
+    FxQuoteUnableToUpdateQuoteToDatabaseErrorEvt,
+    FxQuoteResponseAcceptedEvtPayload,
+    FxQuoteResponseAcceptedEvt,
 } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { IMessage, DomainEventMsg, MessageTypes } from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
@@ -101,6 +108,8 @@ export class FXQuoteAggregate {
     }
 
     async handleFxQuoteRequestReceivedEvt(message: FxQuoteRequestReceivedEvt): Promise<void> {
+        message.validatePayload();
+
         const conversionRequestId = message.payload.conversionRequestId;
         this._logger.info(`Started handling the event - ${message.msgName} with conversionRequestId: ${conversionRequestId}`);
 
@@ -110,8 +119,6 @@ export class FXQuoteAggregate {
         const expirationDate = message.payload.conversionTerms?.expiration ?? null;
 
         let eventToPublish: DomainEventMsg | null = null;
-
-        message.validatePayload();
 
         // Check supported currencies for both source and target
         const isSchemeValid = this.validateScheme(message);
@@ -154,18 +161,8 @@ export class FXQuoteAggregate {
             createdAt: now,
             updatedAt: now,
             conversionRequestId: message.payload.conversionRequestId,
-            conversionTerms: {
-                conversionId: message.payload.conversionTerms.conversionId,
-                determiningTransferId: message.payload.conversionTerms.determiningTransferId,
-                initiatingFsp: message.payload.conversionTerms.initiatingFsp,
-                counterPartyFsp: message.payload.conversionTerms.counterPartyFsp,
-                amountType: message.payload.conversionTerms.amountType,
-                sourceAmount: message.payload.conversionTerms.sourceAmount,
-                targetAmount: message.payload.conversionTerms.targetAmount,
-                expiration: message.payload.conversionTerms.expiration,
-                charges: message.payload.conversionTerms.charges,
-                extensionList: message.payload.conversionTerms.extensionList,
-            },
+            conversionTerms: message.payload.conversionTerms,
+            condition: null,
             status: FxQuoteStatus.PENDING,
             errorInformation: null,
         };
@@ -183,10 +180,7 @@ export class FXQuoteAggregate {
                     errorDescription: errMsg,
                 };
                 eventToPublish = new FxQuoteUnableToAddQuoteToDatabaseErrorEvt(errPayload);
-            }
 
-            if (eventToPublish) {
-                // Send the error event
                 await this.publishEvent(eventToPublish, fspiopOpaqueState);
                 return;
             }
@@ -195,24 +189,104 @@ export class FXQuoteAggregate {
         // Prepare to send the fxQuote to FSPIOP via producer
         const payload: FxQuoteRequestAcceptedEvtPayload = {
             conversionRequestId: conversionRequestId,
-            conversionTerms: {
-                conversionId: message.payload.conversionTerms.conversionId,
-                determiningTransferId: message.payload.conversionTerms.determiningTransferId,
-                initiatingFsp: message.payload.conversionTerms.initiatingFsp,
-                counterPartyFsp: message.payload.conversionTerms.counterPartyFsp,
-                amountType: message.payload.conversionTerms.amountType,
-                sourceAmount: message.payload.conversionTerms.sourceAmount,
-                targetAmount: message.payload.conversionTerms.targetAmount,
-                expiration: message.payload.conversionTerms.expiration,
-                charges: message.payload.conversionTerms.charges,
-                extensionList: message.payload.conversionTerms.extensionList,
-            }
+            conversionTerms: message.payload.conversionTerms
         };
         eventToPublish = new FxQuoteRequestAcceptedEvt(payload);
 
+        await this.publishEvent(eventToPublish, fspiopOpaqueState);
+    }
+
+    async handleFxQuoteResponseReceivedEvt(message: FxQuoteResponseReceivedEvt): Promise<void> {
+        message.validatePayload();
+
+        const conversionRequestId = message.payload.conversionRequestId;
+        this._logger.info(`Started handling the event - ${message.msgName} with conversionRequestId: ${conversionRequestId}`);
+        
+        const fspiopOpaqueState = message.fspiopOpaqueState;
+        const requesterFspId = message.payload.conversionTerms?.initiatingFsp ?? fspiopOpaqueState.requesterFspId ?? null;
+        const destinationFspId = message.payload.conversionTerms?.counterPartyFsp ?? fspiopOpaqueState.destinationFspId ?? null;
+        const expirationDate = message.payload.conversionTerms?.expiration ?? null;
+
+        let eventToPublish: DomainEventMsg | null = null;
+        let fxQuoteStatus: FxQuoteStatus = FxQuoteStatus.ACCEPTED;
+
+        // Check supported currencies for both source and target
+        const isSchemeValid = this.validateScheme(message);
+        if (!isSchemeValid) {
+            this._logger.error(`FX Quote ${conversionRequestId} rejected due to scheme validation error`);
+
+            const errPayload: FxQuoteBCQuoteRuleSchemeViolatedResponseErrorEvtPayload = {
+                conversionRequestId: conversionRequestId,
+                errorDescription: `FxQuote response scheme validation failed for : ${conversionRequestId}`,
+            };
+            eventToPublish = new FxQuoteBCQuoteRuleSchemeViolatedResponseErrorEvt(errPayload);
+            fxQuoteStatus = FxQuoteStatus.REJECTED;
+        }
+
+        if (!eventToPublish) {
+            eventToPublish = await this.validateRequesterFsp(requesterFspId, conversionRequestId);
+
+            if (eventToPublish) {
+                this._logger.error(`FX Quote ${conversionRequestId} rejected due to requester FSP error`);
+                fxQuoteStatus = FxQuoteStatus.REJECTED;
+            }
+        }
+
+        if (!eventToPublish) {
+            eventToPublish = await this.validateDestinationFsp(destinationFspId, conversionRequestId);
+
+            if (eventToPublish) {
+                this._logger.error(`FX Quote ${conversionRequestId} rejected due to destination FSP error`);
+                fxQuoteStatus = FxQuoteStatus.REJECTED;
+            }
+        }
+
+        if (!eventToPublish) {
+            eventToPublish = this.validateFxQuoteExpirationDate(conversionRequestId, expirationDate);
+
+            if (eventToPublish) {
+                this._logger.error(`FX Quote ${conversionRequestId} has expired`);
+                fxQuoteStatus = FxQuoteStatus.EXPIRED;
+            }
+        }
+
+        if (!this._passThroughMode) {
+            const fxQuote: Partial<IFxQuote> = {
+                conversionRequestId: conversionRequestId,
+                condition: message.payload.condition,
+                conversionTerms: message.payload.conversionTerms,
+                status: fxQuoteStatus,
+            };
+
+            try {
+                await this._fxQuotesRepo.updateQuote(fxQuote as IFxQuote);
+            } catch(err: unknown) {
+                const errMsg = `Unable to update FX Quote in database with ID: ${conversionRequestId}`;
+                this._logger.error(errMsg, err);
+
+                const errPayload: FxQuoteUnableToUpdateQuoteToDatabaseErrorEvtPayload = {
+                    conversionRequestId: conversionRequestId,
+                    errorDescription: errMsg,
+                };
+                eventToPublish = new FxQuoteUnableToUpdateQuoteToDatabaseErrorEvt(errPayload);
+            }
+        }
+
+        // If there is an error event, publish it
         if (eventToPublish) {
             await this.publishEvent(eventToPublish, fspiopOpaqueState);
+            return;
         }
+
+        // If all ok, send the accepted event
+        const payload: FxQuoteResponseAcceptedEvtPayload = {
+            conversionRequestId: conversionRequestId,
+            condition: message.payload.condition,
+            conversionTerms: message.payload.conversionTerms,
+        };
+        eventToPublish = new FxQuoteResponseAcceptedEvt(payload);
+
+        await this.publishEvent(eventToPublish, fspiopOpaqueState);
     }
 
     validateMessageOrGetErrorEvent(message: IMessage): DomainEventMsg | null {

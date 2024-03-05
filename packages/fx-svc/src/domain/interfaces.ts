@@ -42,5 +42,7 @@ export interface IParticipantsServiceAdapter {
 export interface IFxQuoteRepo {
     init(): Promise<void>;
     destroy(): Promise<void>;
+    getFxQuoteById(conversionRequestId: string): Promise<IFxQuote | null>;
     addFxQuote(fxQuote: IFxQuote): Promise<string>;
+    updateQuote(fxQuote: IFxQuote): Promise<void>;
 }

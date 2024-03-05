@@ -98,6 +98,7 @@ export interface IFxQuote {
 	updatedAt: number;
 	conversionRequestId: string;
 	conversionTerms: IConversionTerms;
+	condition: string | null;
 	status: FxQuoteStatus | null;
 	errorInformation: IErrorInformation | null;
 }

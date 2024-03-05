@@ -50,6 +50,12 @@ export class UnableToGetFxQuoteError extends Error {
     }
 }
 
+export class FxQuoteNotFoundError extends Error {
+    constructor(message?: string) {
+        super(message || "FX Quote not found");
+    }
+}
+
 export class FxQuoteAlreadyExistsError extends Error {
     constructor(message?: string) {
         super(message || "FX Quote already exists");
@@ -59,5 +65,11 @@ export class FxQuoteAlreadyExistsError extends Error {
 export class UnableToAddFxQuoteError extends Error {
     constructor(message?: string) {
         super(message || "Unable to insert the FX Quote");
+    }
+}
+
+export class UnableToUpdateFxQuoteError extends Error {
+    constructor(message?: string) {
+        super(message || "Unable to update the FX Quote");
     }
 }

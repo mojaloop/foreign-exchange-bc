@@ -42,6 +42,7 @@ import {
     FxQuoteRequestReceivedEvt,
     FxQuoteUnknownErrorEvent,
     FxQuoteUnknownErrorPayload,
+    FxQuoteResponseReceivedEvt,
 } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { FXQuoteAggregate } from "../../domain/aggregates/fx_quote_agg";
 
@@ -74,6 +75,9 @@ export class FXQuoteEventHandler extends BaseEventHandler {
             switch(message.msgName) {
                 case FxQuoteRequestReceivedEvt.name:
                     this._aggregate.handleFxQuoteRequestReceivedEvt(message as FxQuoteRequestReceivedEvt);
+                    break;
+                case FxQuoteResponseReceivedEvt.name:
+                    this._aggregate.handleFxQuoteResponseReceivedEvt(message as FxQuoteResponseReceivedEvt);
                     break;
                 default:
                     this._logger.warn(`Cannot handle message of type: ${message.msgName}, ignoring`);
