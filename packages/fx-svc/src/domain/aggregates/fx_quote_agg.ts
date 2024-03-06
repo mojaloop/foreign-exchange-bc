@@ -75,6 +75,14 @@ import {
     FxQuoteUnableToUpdateQuoteToDatabaseErrorEvt,
     FxQuoteResponseAcceptedEvtPayload,
     FxQuoteResponseAcceptedEvt,
+    FxQuoteQueryReceivedEvt,
+    FxQuoteBCQuoteNotFoundErrorEvtPayload,
+    FxQuoteBCQuoteNotFoundErrorEvt,
+    FxQuoteQueryRespondedEvtPayload,
+    FxQuoteQueryRespondedEvt,
+    FxQuoteRejectReceivedEvt,
+    FxQuoteRejectRespondedEvtPayload,
+    FxQuoteRejectRespondedEvt,
 } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { IMessage, DomainEventMsg, MessageTypes } from "@mojaloop/platform-shared-lib-messaging-types-lib";
 import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
@@ -287,6 +295,94 @@ export class FXQuoteAggregate {
         eventToPublish = new FxQuoteResponseAcceptedEvt(payload);
 
         await this.publishEvent(eventToPublish, fspiopOpaqueState);
+    }
+
+    async handleFxQuoteQueryReceivedEvt(message: FxQuoteQueryReceivedEvt): Promise<void> {
+        message.validatePayload();
+
+        const conversionRequestId = message.payload.conversionRequestId;
+        this._logger.info(`Started handling the event - ${message.msgName} with conversionRequestId: ${conversionRequestId}`);
+        
+        const fspiopOpaqueState = message.fspiopOpaqueState;
+        const requesterFspId = fspiopOpaqueState.requesterFspId ?? null;
+        const destinationFspId = fspiopOpaqueState.destinationFspId ?? null;
+
+        let eventToPublish: DomainEventMsg | null = null;
+
+        eventToPublish = await this.validateRequesterFsp(requesterFspId, conversionRequestId);
+        if (eventToPublish) {
+            // Send the error event
+            await this.publishEvent(eventToPublish, fspiopOpaqueState);
+            return;
+        }
+
+        eventToPublish = await this.validateDestinationFsp(destinationFspId, conversionRequestId);
+        if (eventToPublish) {
+            // Send the error event
+            await this.publishEvent(eventToPublish, fspiopOpaqueState);
+            return;
+        }
+
+        const fxQuote = await this._fxQuotesRepo.getFxQuoteById(conversionRequestId).catch((err: unknown) => {
+            this._logger.error(`Error getting FX Quote with ID: ${conversionRequestId}`, err);
+            return null;
+        });
+
+        if (!fxQuote) {
+            const errPayload: FxQuoteBCQuoteNotFoundErrorEvtPayload = {
+                conversionRequestId: conversionRequestId,
+                errorDescription: `FX Quote with ID: ${conversionRequestId} not found`,
+            };
+            const errEvent = new FxQuoteBCQuoteNotFoundErrorEvt(errPayload);
+
+            await this.publishEvent(errEvent, fspiopOpaqueState);
+            return;
+        }
+
+        // If all ok, send back the fx quote
+        const payload: FxQuoteQueryRespondedEvtPayload = {
+            conversionRequestId: fxQuote.conversionRequestId,
+            condition: fxQuote.condition,
+            conversionTerms: fxQuote.conversionTerms
+        };
+        const event = new FxQuoteQueryRespondedEvt(payload);
+        
+        await this.publishEvent(event, fspiopOpaqueState);
+    }
+
+    async handleFxQuoteRejectReceivedEvt(message: FxQuoteRejectReceivedEvt): Promise<void> {
+        message.validatePayload();
+
+        const conversionRequestId = message.payload.conversionRequestId;
+        this._logger.info(`Started handling the event - ${message.msgName} with conversionRequestId: ${conversionRequestId}`);
+        
+        const fspiopOpaqueState = message.fspiopOpaqueState;
+        const requesterFspId = fspiopOpaqueState.requesterFspId ?? null;
+        const destinationFspId = fspiopOpaqueState.destinationFspId ?? null;
+
+        let eventToPublish: DomainEventMsg | null = null;
+
+        eventToPublish = await this.validateRequesterFsp(requesterFspId, conversionRequestId);
+        if (eventToPublish) {
+            // Send the error event
+            await this.publishEvent(eventToPublish, fspiopOpaqueState);
+            return;
+        }
+
+        eventToPublish = await this.validateDestinationFsp(destinationFspId, conversionRequestId);
+        if (eventToPublish) {
+            // Send the error event
+            await this.publishEvent(eventToPublish, fspiopOpaqueState);
+            return;
+        }
+
+        const payload: FxQuoteRejectRespondedEvtPayload = {
+            conversionRequestId: conversionRequestId,
+            errorInformation: message.payload.errorInformation,
+        };
+        const event = new FxQuoteRejectRespondedEvt(payload);
+        
+        await this.publishEvent(event, fspiopOpaqueState);
     }
 
     validateMessageOrGetErrorEvent(message: IMessage): DomainEventMsg | null {
