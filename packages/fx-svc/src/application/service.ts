@@ -67,6 +67,8 @@ import {PrometheusMetrics} from "@mojaloop/platform-shared-lib-observability-cli
 
 import { ForeignExchangeBCTopics } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { FXServiceEventHandler } from "./event_handlers/fx_svc_event_handler";
+import { FXQuoteEventHandler } from "./event_handlers/fx_quote_event_handler";
+
 import { IParticipantsServiceAdapter } from "../domain/interfaces";
 import { IAuthenticatedHttpRequester } from "@mojaloop/security-bc-public-types-lib";
 import { ParticipantAdapter } from "../implementations/participant_adapter";
@@ -136,6 +138,7 @@ const kafkaProducerOptions = {
 let globalLogger: ILogger;
 
 let fxSvcEvtHandler: FXServiceEventHandler;
+let fxQuoteEvtHandler: FXQuoteEventHandler;
 
 
 export class Service {
@@ -326,7 +329,6 @@ export class Service {
             kafkaBrokerList: KAFKA_URL,
             kafkaGroupId: `${BC_NAME}_${APP_NAME}_FXServiceEventHandler`,
         };
-
         fxSvcEvtHandler = new FXServiceEventHandler(
             this.logger, 
             fxServiceConsumerOpts,
@@ -334,8 +336,21 @@ export class Service {
             this.fxSvcAggregate,
         );
 
+
+        const fxQuoteConsumerOpts: MLKafkaJsonConsumerOptions = {
+            kafkaBrokerList: KAFKA_URL,
+            kafkaGroupId: `${BC_NAME}_${APP_NAME}_FXQuoteEventHandler`,
+        };
+        fxQuoteEvtHandler = new FXQuoteEventHandler(
+            this.logger,
+            fxQuoteConsumerOpts,
+            [ForeignExchangeBCTopics.DomainRequests],
+            this.fxQuoteAggregate,
+        );
+
         await Promise.all([
-            fxSvcEvtHandler.init()
+            fxSvcEvtHandler.init(),
+            fxQuoteEvtHandler.init()
         ]);
     }
 
@@ -388,6 +403,7 @@ export class Service {
 
         // Destroy event handlers
         await fxSvcEvtHandler.destroy();
+        await fxQuoteEvtHandler.destroy();
     }
 }
 
