@@ -65,7 +65,7 @@ import {IConfigurationClient} from "@mojaloop/platform-configuration-bc-public-t
 import {IMetrics} from "@mojaloop/platform-shared-lib-observability-types-lib";
 import {PrometheusMetrics} from "@mojaloop/platform-shared-lib-observability-client-lib";
 
-import { ForeignExchangeBCTopics } from "@mojaloop/platform-shared-lib-public-messages-lib";
+import { ForeignExchangeBCSvcTopics, ForeignExchangeBCQuoteTopics } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { FXServiceEventHandler } from "./event_handlers/fx_svc_event_handler";
 import { FXQuoteEventHandler } from "./event_handlers/fx_quote_event_handler";
 
@@ -332,7 +332,7 @@ export class Service {
         fxSvcEvtHandler = new FXServiceEventHandler(
             this.logger, 
             fxServiceConsumerOpts,
-            [ForeignExchangeBCTopics.DomainRequests],
+            [ForeignExchangeBCSvcTopics.DomainRequests],
             this.fxSvcAggregate,
         );
 
@@ -344,7 +344,7 @@ export class Service {
         fxQuoteEvtHandler = new FXQuoteEventHandler(
             this.logger,
             fxQuoteConsumerOpts,
-            [ForeignExchangeBCTopics.DomainRequests],
+            [ForeignExchangeBCQuoteTopics.DomainRequests],
             this.fxQuoteAggregate,
         );
 

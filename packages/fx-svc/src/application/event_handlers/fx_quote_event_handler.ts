@@ -64,7 +64,7 @@ export class FXQuoteEventHandler extends BaseEventHandler {
     }
 
     async processMessage(message: IMessage): Promise<void> {
-        this._logger.info(`Got message in FXServiceEventHandler - msgName: ${message.msgName}`);
+        this._logger.info(`Got message in FXQuoteEventHandler - msgName: ${message.msgName}`);
 
         // Validate message for error
         const errEvent = this._aggregate.validateMessageOrGetErrorEvent(message);
