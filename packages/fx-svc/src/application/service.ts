@@ -281,11 +281,13 @@ export class Service {
         this.producer = new MLKafkaJsonProducer(kafkaProducerOptions);
         await this.producer.connect();
 
-        // Setup database repositories
+        // Setup database repositories and initialize them
         if (!fxQuotesRepo) {
             fxQuotesRepo = new MongoFxQuotesRepo(this.logger, MONGO_URL, DB_NAME_FX_QUOTES);
         }
         this.fxQuotesRepo = fxQuotesRepo;
+        await this.fxQuotesRepo.init();
+        this.logger.info("FX Quote Repo initialized");
 
         // Setup aggregates
         if (!fxSvcAggregate) {
@@ -397,13 +399,15 @@ export class Service {
             const closeExpress = util.promisify(this.expressServer.close.bind(this.expressServer));
             await closeExpress();
         }
-        if (this.logger && this.logger instanceof KafkaLogger) await this.logger.destroy();
         if (this.auditClient) await this.auditClient.destroy();
         if (this.producer) await this.producer.destroy();
+        if (this.fxQuotesRepo) await this.fxQuotesRepo.destroy();
 
         // Destroy event handlers
         await fxSvcEvtHandler.destroy();
         await fxQuoteEvtHandler.destroy();
+
+        if (this.logger && this.logger instanceof KafkaLogger) await this.logger.destroy();
     }
 }
 

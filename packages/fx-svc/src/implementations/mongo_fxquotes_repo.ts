@@ -70,7 +70,7 @@ export class MongoFxQuotesRepo implements IFxQuoteRepo {
     async init(): Promise<void> {
         try {
             this.mongoClient = new MongoClient(this._connectionString);
-            this.mongoClient.connect();
+            await this.mongoClient.connect();
             this.fxQuotes = this.mongoClient.db(this._dbName).collection(this._collectionName);
 
             await this.fxQuotes.createIndex({ conversionRequestId: 1 }, { unique: true });
