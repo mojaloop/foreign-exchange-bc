@@ -115,13 +115,12 @@ export class FXQuoteAggregate {
         this._passThroughMode = passThroughMode;
     }
 
-    async handleFxQuoteRequestReceivedEvt(message: FxQuoteRequestReceivedEvt): Promise<void> {
+    async handleFxQuoteRequestReceivedEvt(message: FxQuoteRequestReceivedEvt, fspiopOpaqueState: any): Promise<void> {
         message.validatePayload();
 
         const conversionRequestId = message.payload.conversionRequestId;
         this._logger.info(`Started handling the event - ${message.msgName} with conversionRequestId: ${conversionRequestId}`);
 
-        const fspiopOpaqueState = message.fspiopOpaqueState;
         const requesterFspId = message.payload.conversionTerms?.initiatingFsp ?? fspiopOpaqueState.requesterFspId ?? null;
         const destinationFspId = message.payload.conversionTerms?.counterPartyFsp ?? fspiopOpaqueState.destinationFspId ?? null;
         const expirationDate = message.payload.conversionTerms?.expiration ?? null;
@@ -204,13 +203,12 @@ export class FXQuoteAggregate {
         await this.publishEvent(eventToPublish, fspiopOpaqueState);
     }
 
-    async handleFxQuoteResponseReceivedEvt(message: FxQuoteResponseReceivedEvt): Promise<void> {
+    async handleFxQuoteResponseReceivedEvt(message: FxQuoteResponseReceivedEvt, fspiopOpaqueState: any): Promise<void> {
         message.validatePayload();
 
         const conversionRequestId = message.payload.conversionRequestId;
         this._logger.info(`Started handling the event - ${message.msgName} with conversionRequestId: ${conversionRequestId}`);
         
-        const fspiopOpaqueState = message.fspiopOpaqueState;
         const requesterFspId = message.payload.conversionTerms?.initiatingFsp ?? fspiopOpaqueState.requesterFspId ?? null;
         const destinationFspId = message.payload.conversionTerms?.counterPartyFsp ?? fspiopOpaqueState.destinationFspId ?? null;
         const expirationDate = message.payload.conversionTerms?.expiration ?? null;
@@ -297,13 +295,12 @@ export class FXQuoteAggregate {
         await this.publishEvent(eventToPublish, fspiopOpaqueState);
     }
 
-    async handleFxQuoteQueryReceivedEvt(message: FxQuoteQueryReceivedEvt): Promise<void> {
+    async handleFxQuoteQueryReceivedEvt(message: FxQuoteQueryReceivedEvt, fspiopOpaqueState: any): Promise<void> {
         message.validatePayload();
 
         const conversionRequestId = message.payload.conversionRequestId;
         this._logger.info(`Started handling the event - ${message.msgName} with conversionRequestId: ${conversionRequestId}`);
         
-        const fspiopOpaqueState = message.fspiopOpaqueState;
         const requesterFspId = fspiopOpaqueState.requesterFspId ?? null;
         const destinationFspId = fspiopOpaqueState.destinationFspId ?? null;
 
@@ -350,13 +347,12 @@ export class FXQuoteAggregate {
         await this.publishEvent(event, fspiopOpaqueState);
     }
 
-    async handleFxQuoteRejectReceivedEvt(message: FxQuoteRejectReceivedEvt): Promise<void> {
+    async handleFxQuoteRejectReceivedEvt(message: FxQuoteRejectReceivedEvt, fspiopOpaqueState: any): Promise<void> {
         message.validatePayload();
 
         const conversionRequestId = message.payload.conversionRequestId;
         this._logger.info(`Started handling the event - ${message.msgName} with conversionRequestId: ${conversionRequestId}`);
         
-        const fspiopOpaqueState = message.fspiopOpaqueState;
         const requesterFspId = fspiopOpaqueState.requesterFspId ?? null;
         const destinationFspId = fspiopOpaqueState.destinationFspId ?? null;
 

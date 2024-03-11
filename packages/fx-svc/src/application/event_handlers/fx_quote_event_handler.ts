@@ -66,26 +66,28 @@ export class FXQuoteEventHandler extends BaseEventHandler {
     async processMessage(message: IMessage): Promise<void> {
         this._logger.info(`Got message in FXQuoteEventHandler - msgName: ${message.msgName}`);
 
-        // Validate message for error
-        const errEvent = this._aggregate.validateMessageOrGetErrorEvent(message);
-        if (errEvent) {
-            await this._aggregate.publishEvent(errEvent, message.fspiopOpaqueState);
-            return;
-        }
+        const fspiopOpaqueState = message.fspiopOpaqueState;
 
         try {
+            // Validate message for error
+            const errEvent = this._aggregate.validateMessageOrGetErrorEvent(message);
+            if (errEvent) {
+                await this._aggregate.publishEvent(errEvent, fspiopOpaqueState);
+                return;
+            }
+
             switch(message.msgName) {
                 case FxQuoteRequestReceivedEvt.name:
-                    this._aggregate.handleFxQuoteRequestReceivedEvt(message as FxQuoteRequestReceivedEvt);
+                    this._aggregate.handleFxQuoteRequestReceivedEvt(new FxQuoteRequestReceivedEvt(message.payload), fspiopOpaqueState);
                     break;
                 case FxQuoteResponseReceivedEvt.name:
-                    this._aggregate.handleFxQuoteResponseReceivedEvt(message as FxQuoteResponseReceivedEvt);
+                    this._aggregate.handleFxQuoteResponseReceivedEvt(new FxQuoteResponseReceivedEvt(message.payload), fspiopOpaqueState);
                     break;
                 case FxQuoteQueryReceivedEvt.name:
-                    this._aggregate.handleFxQuoteQueryReceivedEvt(message as FxQuoteQueryReceivedEvt);
+                    this._aggregate.handleFxQuoteQueryReceivedEvt(new FxQuoteQueryReceivedEvt(message.payload), fspiopOpaqueState);
                     break;
                 case FxQuoteRejectReceivedEvt.name:
-                    this._aggregate.handleFxQuoteRejectReceivedEvt(message as FxQuoteRejectReceivedEvt);
+                    this._aggregate.handleFxQuoteRejectReceivedEvt(new FxQuoteRejectReceivedEvt(message.payload), fspiopOpaqueState);
                     break;
                 default:
                     this._logger.warn(`Cannot handle message of type: ${message.msgName}, ignoring`);
