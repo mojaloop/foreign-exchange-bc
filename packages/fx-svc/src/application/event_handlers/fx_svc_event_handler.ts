@@ -45,14 +45,17 @@ import { FXSvcAggregate } from "../../domain/aggregates/fx_svc_agg";
 
 
 export class FXServiceEventHandler extends BaseEventHandler {
+    private _aggregate: FXSvcAggregate;
 
     constructor(
         logger: ILogger,
         consumerOptions: MLKafkaJsonConsumerOptions,
         kafkaTopics : string[],
-        fxSvcAggregate: FXSvcAggregate
+        aggregate: FXSvcAggregate
     ) {
-        super(logger, consumerOptions, kafkaTopics, HandlerNames.FXService, fxSvcAggregate);
+        super(logger, consumerOptions, kafkaTopics, HandlerNames.FXService);
+
+        this._aggregate = aggregate;
     }
 
     async processMessage(message: IMessage): Promise<void> {
@@ -62,11 +65,11 @@ export class FXServiceEventHandler extends BaseEventHandler {
 
         try {
             // Validate message for error
-            await this._fxSvcAggregate.validateMessageOrGetErrorEvent(message, fspiopOpaqueState);
+            await this._aggregate.validateMessageOrGetErrorEvent(message, fspiopOpaqueState);
 
             switch(message.msgName) {
                 case FxQueryReceivedEvt.name:
-                    this._fxSvcAggregate.handleFxQueryReceivedEvt(new FxQueryReceivedEvt(message.payload), fspiopOpaqueState);
+                    this._aggregate.handleFxQueryReceivedEvt(new FxQueryReceivedEvt(message.payload), fspiopOpaqueState);
                     break;
                 default:
                     this._logger.warn(`Cannot handle message of type: ${message.msgName}, ignoring`);

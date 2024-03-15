@@ -65,15 +65,23 @@ import {IConfigurationClient} from "@mojaloop/platform-configuration-bc-public-t
 import {IMetrics} from "@mojaloop/platform-shared-lib-observability-types-lib";
 import {PrometheusMetrics} from "@mojaloop/platform-shared-lib-observability-client-lib";
 
-import { ForeignExchangeBCTopics } from "@mojaloop/platform-shared-lib-public-messages-lib";
+import { ForeignExchangeBCSvcTopics, ForeignExchangeBCQuoteTopics } from "@mojaloop/platform-shared-lib-public-messages-lib";
 import { FXServiceEventHandler } from "./event_handlers/fx_svc_event_handler";
+import { FXQuoteEventHandler } from "./event_handlers/fx_quote_event_handler";
+
 import { IParticipantsServiceAdapter } from "../domain/interfaces";
 import { IAuthenticatedHttpRequester } from "@mojaloop/security-bc-public-types-lib";
 import { ParticipantAdapter } from "../implementations/participant_adapter";
 import { IAuthorizationClient } from "@mojaloop/security-bc-public-types-lib";
 
+import { IFxQuoteSchemeRules } from "../domain/types";
 import { FXPrivilegesDef } from "../domain/privileges";
 import { FXSvcAggregate } from "../domain/aggregates/fx_svc_agg";
+import { FXQuoteAggregate } from "../domain/aggregates/fx_quote_agg";
+
+import { MongoFxQuotesRepo } from "../implementations/mongo_fxquotes_repo";
+
+import { IFxQuoteRepo } from "../domain/interfaces";
 
 import {Server} from "net";
 import * as util from "util";
@@ -113,7 +121,13 @@ const AUDIT_KEY_FILE_PATH = process.env["AUDIT_KEY_FILE_PATH"] || "/app/data/aud
 const PARTICIPANTS_SVC_URL = process.env["PARTICIPANTS_SVC_URL"] || "http://localhost:3010";
 const PARTICIPANTS_CACHE_TIMEOUT_MS = (process.env["PARTICIPANTS_CACHE_TIMEOUT_MS"] && parseInt(process.env["PARTICIPANTS_CACHE_TIMEOUT_MS"])) || 5 * 60 * 1000;
 
-const SVC_DEFAULT_HTTP_PORT = 3400;
+const PASS_THROUGH_MODE = (process.env["PASS_THROUGH_MODE"]=== "true" )? true : false;
+
+// Express Server Port
+const SVC_DEFAULT_HTTP_PORT = process.env["SVC_DEFAULT_HTTP_PORT"] || 3400;
+
+// Database name
+const DB_NAME_FX_QUOTES = "fx_quoting";
 
 // Kafka options
 const kafkaProducerOptions = {
@@ -124,6 +138,7 @@ const kafkaProducerOptions = {
 let globalLogger: ILogger;
 
 let fxSvcEvtHandler: FXServiceEventHandler;
+let fxQuoteEvtHandler: FXQuoteEventHandler;
 
 
 export class Service {
@@ -136,7 +151,9 @@ export class Service {
     static startupTimer: NodeJS.Timeout;
     static metrics: IMetrics;
     static producer: MLKafkaJsonProducer;
+    static fxQuotesRepo: IFxQuoteRepo;
     static fxSvcAggregate: FXSvcAggregate;
+    static fxQuoteAggregate: FXQuoteAggregate;
     static participantService: IParticipantsServiceAdapter;
 
     static async start(
@@ -146,7 +163,9 @@ export class Service {
         metrics?: IMetrics,
         authorizationClient?: IAuthorizationClient,
         participantService?: IParticipantsServiceAdapter,
-        fxSvcAggregate?: FXSvcAggregate
+        fxQuotesRepo?: IFxQuoteRepo,
+        fxSvcAggregate?: FXSvcAggregate,
+        fxQuoteAggregate?: FXQuoteAggregate,
     ): Promise<void> {
         console.log(`Service starting with PID: ${process.pid}`);
 
@@ -262,14 +281,40 @@ export class Service {
         this.producer = new MLKafkaJsonProducer(kafkaProducerOptions);
         await this.producer.connect();
 
+        // Setup database repositories and initialize them
+        if (!fxQuotesRepo) {
+            fxQuotesRepo = new MongoFxQuotesRepo(this.logger, MONGO_URL, DB_NAME_FX_QUOTES);
+        }
+        this.fxQuotesRepo = fxQuotesRepo;
+        await this.fxQuotesRepo.init();
+        this.logger.info("FX Quote Repo initialized");
+
         // Setup aggregates
         if (!fxSvcAggregate) {
-            this.fxSvcAggregate = new FXSvcAggregate(
+            fxSvcAggregate = new FXSvcAggregate(
                 this.logger,
                 this.producer,
                 this.participantService
             );
         }
+        this.fxSvcAggregate = fxSvcAggregate;
+
+        if (!fxQuoteAggregate) {
+            const currencies = this.configClient.globalConfigs.getCurrencies();
+            const schemeRules: IFxQuoteSchemeRules = {
+                currencies: currencies.map(currency => currency.code),
+            };
+
+            fxQuoteAggregate = new FXQuoteAggregate(
+                this.logger,
+                this.fxQuotesRepo,
+                this.producer,
+                this.participantService,
+                schemeRules,
+                PASS_THROUGH_MODE
+            );
+        }
+        this.fxQuoteAggregate = fxQuoteAggregate;
 
         // Initiate event handlers
         await this.setupEventHandlers();
@@ -286,16 +331,28 @@ export class Service {
             kafkaBrokerList: KAFKA_URL,
             kafkaGroupId: `${BC_NAME}_${APP_NAME}_FXServiceEventHandler`,
         };
-
         fxSvcEvtHandler = new FXServiceEventHandler(
             this.logger, 
             fxServiceConsumerOpts,
-            [ForeignExchangeBCTopics.DomainRequests],
+            [ForeignExchangeBCSvcTopics.DomainRequests],
             this.fxSvcAggregate,
         );
 
+
+        const fxQuoteConsumerOpts: MLKafkaJsonConsumerOptions = {
+            kafkaBrokerList: KAFKA_URL,
+            kafkaGroupId: `${BC_NAME}_${APP_NAME}_FXQuoteEventHandler`,
+        };
+        fxQuoteEvtHandler = new FXQuoteEventHandler(
+            this.logger,
+            fxQuoteConsumerOpts,
+            [ForeignExchangeBCQuoteTopics.DomainRequests],
+            this.fxQuoteAggregate,
+        );
+
         await Promise.all([
-            fxSvcEvtHandler.init()
+            fxSvcEvtHandler.init(),
+            fxQuoteEvtHandler.init()
         ]);
     }
 
@@ -342,12 +399,15 @@ export class Service {
             const closeExpress = util.promisify(this.expressServer.close.bind(this.expressServer));
             await closeExpress();
         }
-        if (this.logger && this.logger instanceof KafkaLogger) await this.logger.destroy();
         if (this.auditClient) await this.auditClient.destroy();
         if (this.producer) await this.producer.destroy();
+        if (this.fxQuotesRepo) await this.fxQuotesRepo.destroy();
 
         // Destroy event handlers
         await fxSvcEvtHandler.destroy();
+        await fxQuoteEvtHandler.destroy();
+
+        if (this.logger && this.logger instanceof KafkaLogger) await this.logger.destroy();
     }
 }
 
