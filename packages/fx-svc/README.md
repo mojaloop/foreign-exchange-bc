@@ -1,7 +1,6 @@
-# Typescript BC Template - Example Service
+# Foreign Exchange BC Template - Foreign Exchange Service
 
-
-Mojaloop vNext Typescript BC Template Example Service
+Mojaloop vNext Foreign Exchange BC Template - Foreign Exchange Service
 
 #Notes
 
