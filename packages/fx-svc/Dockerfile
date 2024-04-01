@@ -53,6 +53,6 @@ RUN apk add librdkafka
 COPY --from=builder /app .
 
 # expose correct service oprt
-# EXPOSE 8111
+EXPOSE 3400
 
 CMD [ "npm", "run", "start:fx-svc" ]
