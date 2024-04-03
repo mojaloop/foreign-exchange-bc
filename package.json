@@ -55,6 +55,6 @@
         "node": ">=20.10.0"
     },
     "dependencies": {
-        "@mojaloop/platform-shared-lib-public-messages-lib": "^0.5.13"
+        "@mojaloop/platform-shared-lib-public-messages-lib": "^0.5.14"
     }
 }

@@ -6,7 +6,7 @@
     "homepage": "https://github.com/mojaloop/foreign-exchange-bc/",
     "private": true,
     "mojaloop": {
-        "publish_to_dockerhub": false
+        "publish_to_dockerhub": true
     },
     "bugs": {
         "url": "https://github.com/mojaloop/foreign-exchange-bc/issues#readme"
@@ -43,10 +43,10 @@
         "@mojaloop/auditing-bc-public-types-lib": "~0.5.2",
         "@mojaloop/platform-shared-lib-observability-types-lib": "~0.5.2",
         "@mojaloop/platform-shared-lib-observability-client-lib": "~0.5.1",
-        "@mojaloop/platform-shared-lib-public-messages-lib": "~0.5.13",
-        "@mojaloop/security-bc-client-lib": "~0.5.9",
+        "@mojaloop/platform-shared-lib-public-messages-lib": "~0.5.14",
+        "@mojaloop/security-bc-client-lib": "~0.5.10",
         "@mojaloop/auditing-bc-client-lib": "~0.5.2",
-        "@mojaloop/participants-bc-client-lib": "~0.5.3",
+        "@mojaloop/participants-bc-client-lib": "~0.5.4",
         "@mojaloop/participant-bc-public-types-lib": "~0.5.4",
         "express": "^4.18.3",
         "mongodb": "^6.3.0"

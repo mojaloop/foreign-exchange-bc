@@ -4,6 +4,7 @@
     "description": "mojaloop foreign-exchange-bc public types lib",
     "license": "Apache-2.0",
     "homepage": "https://github.com/mojaloop/foreign-exchange-bc/",
+    "private": true,
     "bugs": {
         "url": "https://github.com/mojaloop/foreign-exchange-bc/issues#readme"
     },
