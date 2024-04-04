@@ -1,6 +1,6 @@
 {
     "name": "@mojaloop/foreign-exchange-bc-foreign-exchange-svc",
-    "version": "0.0.1",
+    "version": "0.5.0",
     "description": "mojaloop foreign-exchange-bc service",
     "license": "Apache-2.0",
     "homepage": "https://github.com/mojaloop/foreign-exchange-bc/",
@@ -37,6 +37,7 @@
         "dep:update": "ncu -u"
     },
     "dependencies": {
+        "@mojaloop/foreign-exchange-bc-public-types-lib": "*",
         "@mojaloop/logging-bc-client-lib": "~0.5.6",
         "@mojaloop/platform-configuration-bc-client-lib": "~0.5.4",
         "@mojaloop/platform-configuration-bc-public-types-lib": "~0.5.2",
