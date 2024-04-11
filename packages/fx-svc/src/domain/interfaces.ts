@@ -30,21 +30,19 @@
 
 "use strict";
 
-import { ConfigurationClient, IConfigProvider } from "@mojaloop/platform-configuration-bc-client-lib";
-// import {ConfigParameterTypes} from "@mojaloop/platform-configuration-bc-public-types-lib";
+import { ParticipantSearchResults } from "../domain/types";
+import { IParticipant } from "@mojaloop/participant-bc-public-types-lib";
+import { IFxQuote } from "../domain/types";
 
-// configs - constants / code dependent
-const CONFIGSET_VERSION = "0.0.1";
+export interface IParticipantsServiceAdapter {
+    getAllParticipants(): Promise<ParticipantSearchResults | null>;
+    getParticipantInfo(fspId: string): Promise<IParticipant | null>;
+}
 
-export function GetFXConfigSet(
-    configProvider: IConfigProvider,
-    bcName:string,
-    appName:string,
-    appVersion:string
-): ConfigurationClient {
-    const configClient = new ConfigurationClient(
-        bcName, appName, appVersion, CONFIGSET_VERSION, configProvider
-    );
-
-    return configClient;
+export interface IFxQuoteRepo {
+    init(): Promise<void>;
+    destroy(): Promise<void>;
+    getFxQuoteById(conversionRequestId: string): Promise<IFxQuote | null>;
+    addFxQuote(fxQuote: IFxQuote): Promise<string>;
+    updateQuote(fxQuote: IFxQuote): Promise<void>;
 }

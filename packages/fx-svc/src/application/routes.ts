@@ -63,11 +63,10 @@ export class ExpressRoutes {
     private async getVersion(req: express.Request, res: express.Response, next: express.NextFunction){
         this._logger.debug("Got request to version endpoint");
         return res.send({
-            environmentName: this._configClient.environmentName,
             bcName: this._configClient.boundedContextName,
             appName: this._configClient.applicationName,
             appVersion: this._configClient.applicationVersion,
-            configsIterationNumber: this._configClient.appConfigs.iterationNumber
+            configsIterationNumber: this._configClient.bcConfigs.iterationNumber
         });
     }
 

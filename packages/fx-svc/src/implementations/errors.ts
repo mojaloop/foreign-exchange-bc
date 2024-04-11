@@ -30,21 +30,46 @@
 
 "use strict";
 
-import { ConfigurationClient, IConfigProvider } from "@mojaloop/platform-configuration-bc-client-lib";
-// import {ConfigParameterTypes} from "@mojaloop/platform-configuration-bc-public-types-lib";
+// Database
+export class UnableToInitFxQuoteRegistryError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
+}
 
-// configs - constants / code dependent
-const CONFIGSET_VERSION = "0.0.1";
+export class UnableToCloseDatabaseConnectionError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
+}
 
-export function GetFXConfigSet(
-    configProvider: IConfigProvider,
-    bcName:string,
-    appName:string,
-    appVersion:string
-): ConfigurationClient {
-    const configClient = new ConfigurationClient(
-        bcName, appName, appVersion, CONFIGSET_VERSION, configProvider
-    );
+// fxQuote Repo
+export class UnableToGetFxQuoteError extends Error {
+    constructor(message?: string) {
+        super(message || "Unable to get the FX Quote");
+    }
+}
 
-    return configClient;
+export class FxQuoteNotFoundError extends Error {
+    constructor(message?: string) {
+        super(message || "FX Quote not found");
+    }
+}
+
+export class FxQuoteAlreadyExistsError extends Error {
+    constructor(message?: string) {
+        super(message || "FX Quote already exists");
+    }
+}
+
+export class UnableToAddFxQuoteError extends Error {
+    constructor(message?: string) {
+        super(message || "Unable to insert the FX Quote");
+    }
+}
+
+export class UnableToUpdateFxQuoteError extends Error {
+    constructor(message?: string) {
+        super(message || "Unable to update the FX Quote");
+    }
 }

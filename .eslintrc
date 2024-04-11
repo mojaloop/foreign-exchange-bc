@@ -10,7 +10,7 @@
     "rules": {
         "brace-style": ["error", "1tbs"],
         "semi": [ "error" ],
-        "quotes": ["error", "double", { "allowTemplateLiterals": false } ],
+        "quotes": ["error", "double", { "allowTemplateLiterals": true } ],
         "@typescript-eslint/no-inferrable-types": "off",
         "@typescript-eslint/naming-convention": [
             "error",
