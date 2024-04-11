@@ -72,7 +72,9 @@ function setupRoutes() {
     app.use("/", routes.MainRouter);
 
     // catch all
-    app.use((req, res) => { res.send(404); });
+    app.use((req, res) => { 
+        res.send(404); 
+    });
     logger.info("Express routes setup");
 }
 
@@ -108,7 +110,7 @@ process.on("SIGINT", _handle_int_and_term_signals.bind(this));
 process.on("SIGTERM", _handle_int_and_term_signals.bind(this));
 
 //do something when app is closing
-process.on('exit', () => {
+process.on("exit", () => {
     logger.info("Example server - exiting...");
 });
 
