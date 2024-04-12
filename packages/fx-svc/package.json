@@ -49,7 +49,7 @@
         "@mojaloop/auditing-bc-client-lib": "~0.5.2",
         "@mojaloop/participants-bc-client-lib": "~0.5.4",
         "@mojaloop/participant-bc-public-types-lib": "~0.5.4",
-        "express": "^4.18.3",
+        "express": "^4.19.2",
         "mongodb": "^6.3.0"
     },
     "devDependencies": {

@@ -33,7 +33,7 @@
     "dependencies": {
         "@mojaloop/logging-bc-client-lib": "^0.1.30",
         "@mojaloop/platform-configuration-bc-client-lib": "^0.1.22",
-        "express": "^4.18.3"
+        "express": "^4.19.2"
     },
     "devDependencies": {
         "@mojaloop/logging-bc-public-types-lib": "^0.1.23",
